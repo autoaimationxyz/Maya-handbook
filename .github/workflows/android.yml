@@ -60,6 +60,12 @@ jobs:
       - name: Sync
         run: npx cap sync android
 
+      - name: Android SDK level
+        run: |
+          sed -i 's/compileSdkVersion = [0-9]*/compileSdkVersion = 35/' android/variables.gradle
+          echo "android.suppressUnsupportedCompileSdk=35" >> android/gradle.properties
+          grep -n "SdkVersion" android/variables.gradle
+
       - name: Set version
         run: |
           sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/" android/app/build.gradle
