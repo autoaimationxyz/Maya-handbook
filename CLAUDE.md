@@ -16,7 +16,8 @@ This repo is Maya Traders' personal sales handbook app. The owner is a BTech EEE
 ## Config
 
 - `app.config.json` holds the app name, the Android package (`in.mayatraders.app`) and the Google Web client ID. Changing it rebuilds both the site and the APK.
-- Google sign-in in the APK uses `@codetrix-studio/capacitor-google-auth`. The web uses Google Identity Services. Calendar and Drive calls are plain REST in the `G` object in `app.js`.
+- Calendar sync in the APK uses `@ebarooni/capacitor-calendar` (the `Cal` object in `app.js`) and writes to the phone's calendar. The owner does NOT want a Google Cloud setup. The `G` object (Google REST through a Web client ID) stays dormant unless a client ID is configured, and it is hidden in the APK.
+- The signing key is committed in `signing/` on purpose (the owner can't add GitHub secrets). Never change it, or the app can't update.
 - Stored data keys: `products, progress, notes, settings, leads, quotes, surveys, orders, partners, expenses, activities`. Photos live in IndexedDB (`maya-photos`).
 
 ## Rules

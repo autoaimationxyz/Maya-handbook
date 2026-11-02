@@ -10,6 +10,7 @@ on:
     paths:
       - "package.json"
       - "assets/**"
+      - "signing/**"
       - "scripts/cap-config.js"
       - "app.config.json"
       - ".github/workflows/android.yml"
@@ -20,17 +21,7 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    env:
-      KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-      KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
     steps:
-      - name: Check the signing key is set up
-        run: |
-          if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ]; then
-            echo "::error::Add the ANDROID_KEYSTORE_B64 and ANDROID_KEYSTORE_PASSWORD repository secrets (see README, step 3)."
-            exit 1
-          fi
-
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -56,12 +47,11 @@ jobs:
       - name: Create Android project
         run: npx cap add android
 
-      - name: Google sign-in client id
+      - name: Calendar permissions
         run: |
-          CID=$(node -p "require('./app.config.json').googleWebClientId || 'not-set'")
-          STR=android/app/src/main/res/values/strings.xml
-          grep -q server_client_id "$STR" || sed -i "s#</resources>#    <string name=\"server_client_id\">$CID</string>\n</resources>#" "$STR"
-          cat "$STR"
+          M=android/app/src/main/AndroidManifest.xml
+          grep -q READ_CALENDAR "$M" || sed -i 's#</manifest>#    <uses-permission android:name="android.permission.READ_CALENDAR" />\n    <uses-permission android:name="android.permission.WRITE_CALENDAR" />\n</manifest>#' "$M"
+          grep -n CALENDAR "$M"
 
       - name: Icons and splash screen
         continue-on-error: true
@@ -83,7 +73,9 @@ jobs:
 
       - name: Sign
         run: |
-          echo "$KS_B64" | base64 -d > ks.jks
+          # The signing key lives in signing/ so the build needs no setup.
+          cp signing/maya-release.jks ks.jks
+          export KS_PASS="$(cat signing/password.txt)"
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           "$BT/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
           "$BT/apksigner" sign --ks ks.jks --ks-pass env:KS_PASS --key-pass env:KS_PASS --ks-key-alias maya --out MayaTraders.apk aligned.apk

@@ -7,7 +7,7 @@ Your one app for Maya Traders sales in Delhi NCR:
 - **Learn:** 12 short EEE lessons with quizzes.
 - **Tools:** 10 site calculators.
 - **Sell:** leads, quotes (letterhead PDF and WhatsApp), orders and payments, referral partners and fees, site surveys and meeting prep.
-- **Also:** an activity log, expenses, notes, and Google Calendar and Drive sync.
+- **Also:** an activity log, expenses, notes, phone calendar sync, and backups to Google Drive.
 
 - **Web app:** `https://<your-github-username>.github.io/<repo-name>/`
 - **Android app:** the latest `MayaTraders.apk` on this repo's **Releases** page.
@@ -26,25 +26,23 @@ Edit content or code ──push to main──▶ "Publish web app" workflow ─�
 
 ## One-time setup
 
-1. **Turn on GitHub Pages.** After the first push, open the **Actions** tab and wait for *Publish web app* to finish. Then go to **Settings → Pages** and check that *Source* is **Deploy from a branch**, branch **gh-pages**, folder **/ (root)**. Save it if it isn't.
-2. **Open the web app** on your phone at the address above. Chrome's menu → **Install app** gives you a home-screen app straight away.
-3. **Add the signing key** so GitHub can build the APK. In **Settings → Secrets and variables → Actions → New repository secret**, add:
-   - `ANDROID_KEYSTORE_B64`: the long text from `maya-signing-key.txt`
-   - `ANDROID_KEYSTORE_PASSWORD`: the password from the same file
+1. Open the web app address above. If it shows a 404 page, go to **Settings → Pages** in this repo, set *Source* to **Deploy from a branch**, branch **gh-pages**, folder **/ (root)**, and **Save**.
+2. Open the **Releases** page on your phone, download `MayaTraders.apk` and install it. Android will ask you to allow installs from your browser or Files app.
+3. In the app, open **Today → Settings → Connect calendar**.
 
-   Keep `maya-release.jks` and the password safe and private. Every future APK must be signed with the same key, or Android will refuse to update the app.
-4. **Build the APK.** Go to **Actions → Build Android app → Run workflow**. When it finishes, open **Releases** on your phone, download `MayaTraders.apk` and install it. Android will ask you to allow installs from your browser or Files app.
+The APK is signed with the key in `signing/`, so builds need no secrets.
 
-## Google Calendar and Drive
+## Calendar and Drive
 
-See **[GOOGLE_SETUP.md](GOOGLE_SETUP.md)**: a 10-minute, one-time setup. Then put the Web client ID in `app.config.json`, or send it to Claude, and push. That rebuilds the APK.
+- **Calendar:** the Android app writes follow-ups, site visits and payment due dates into your phone's calendar, with reminders. Today's meetings show on the Today screen. If your phone's calendar is your Google account, everything appears in Google Calendar too. No Google setup or payment is needed.
+- **Drive:** *Settings → Make backup file → Drive* in the share menu saves a full backup to your Google Drive. Quote PDFs share the same way.
 
 ## Your data
 
-Leads, quotes, orders, partners, expenses, surveys, prices, notes and photos are saved **on the phone**, inside the app. With Google connected, they also back up to your own Drive automatically. Nothing personal goes to GitHub.
+Leads, quotes, orders, partners, expenses, surveys, prices, notes and photos are saved **on the phone**, inside the app. Nothing personal goes to GitHub.
 
-- **Notes → Make backup** creates a backup file. Save it to Google Drive or send it to yourself on WhatsApp. Do this every week or two; the app reminds you after 14 days.
-- **Notes → Restore from backup** loads a backup on a new phone, or after reinstalling.
+- **Settings → Make backup file** creates a backup file. Save it to Google Drive or send it to yourself on WhatsApp. Do this every week or two; the app reminds you after 14 days.
+- **Settings → Restore from file** loads a backup on a new phone, or after reinstalling.
 - The Android app and the web app in Chrome keep **separate** data. Pick one to use day to day, and move data between them with a backup.
 
 ## Project layout

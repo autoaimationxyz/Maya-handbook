@@ -763,7 +763,8 @@ function vLead(id){
     <div class="btnbar"><button class="btn pri" data-act="savelead">${svg("check")} Save lead</button>
     ${l.id ? `<button class="btn" data-act="logfor" data-id="${l.id}">${svg("check")} Log meeting</button><a class="btn" href="#quote" data-act="quotefor" data-id="${l.id}">${svg("quote")} Quote</a><a class="btn" href="#survey" data-act="surveyfor" data-id="${l.id}">${svg("clip")} Survey</a>` : ""}
     ${l.phone ? `<a class="btn" href="${waLink(l.phone,"Hello "+(l.name||"")+", this is from Maya Traders.")}" target="_blank" rel="noopener">${svg("wa")} WhatsApp</a>` : ""}</div>
-    ${l.id && !G.on() && (l.next || l.visit) ? `<div class="btnbar">${l.next ? `<a class="btn sm" target="_blank" rel="noopener" href="${gcalLink("Follow up: " + l.name, l.next, l.nextTime, l.phone || "")}">Add follow-up to Calendar</a>` : ""}${l.visit ? `<a class="btn sm" target="_blank" rel="noopener" href="${gcalLink("Site visit: " + l.name + (l.area ? ", " + l.area : ""), l.visit, l.visitTime, l.phone || "")}">Add visit to Calendar</a>` : ""}</div>` : ""}
+    ${l.id && Cal.on() && (l.next || l.visit) ? `<p class="small muted" style="margin-top:8px">${l.cDirty ? "Saving to your calendar…" : "In your calendar."}</p>` : ""}
+    ${l.id && !G.on() && !Cal.on() && (l.next || l.visit) ? `<div class="btnbar">${l.next ? `<a class="btn sm" target="_blank" rel="noopener" href="${gcalLink("Follow up: " + l.name, l.next, l.nextTime, l.phone || "")}">Add follow-up to Calendar</a>` : ""}${l.visit ? `<a class="btn sm" target="_blank" rel="noopener" href="${gcalLink("Site visit: " + l.name + (l.area ? ", " + l.area : ""), l.visit, l.visitTime, l.phone || "")}">Add visit to Calendar</a>` : ""}</div>` : ""}
     ${l.id && G.on() && (l.next || l.visit) ? `<p class="small muted" style="margin-top:8px">${l.gDirty ? "Waiting to sync to Google Calendar." : "In your Google Calendar."}</p>` : ""}
     ${l.phone ? `<p class="small muted" style="margin-top:8px">Phone: <a class="mono" href="tel:${esc(l.phone.replace(/[^\d+]/g,""))}">${esc(l.phone)}</a> <button class="btn sm ghost" data-act="copy" data-text="${esc(l.phone)}">Copy</button></p>` : ""}
     ${l.id ? `<div class="btnbar"><button class="btn sm ghost danger" data-act="dellead" data-id="${l.id}">${ui.del==="lead-"+l.id?"Tap again to delete":"Delete lead"}</button></div>` : ""}
@@ -778,7 +779,7 @@ function saveLead(){
   if (!v.name.trim()){ toast("Add a name first"); $("#f-name").focus(); return; }
   const id = f.dataset.id || uid();
   const old = Store.data.leads[id] || {created: today()};
-  Store.data.leads[id] = {...old, ...v, id, value: num(v.value), products: ui.leadDraftProducts || [], updated: today(), gDirty: true};
+  Store.data.leads[id] = {...old, ...v, id, value: num(v.value), products: ui.leadDraftProducts || [], updated: today(), gDirty: true, cDirty: true};
   ui.newLead = null;
   Store.saveItem("leads", id); G.soon(); toast("Lead saved");
   location.hash = "#lead-" + id; if (f.dataset.id) rerender();
@@ -1039,7 +1040,7 @@ function vOrder(id){
     ${o.phone && t.bal ? `<a class="btn" href="${waLink(o.phone, `Hello, gentle reminder from ${S().firm || "Maya Traders"} for order ${o.no}: balance of ${inr(t.bal)} is due${o.due ? " by " + fmtD(o.due) : ""}. Thank you.`)}" target="_blank" rel="noopener">${svg("wa")} Payment reminder</a>` : ""}
     ${o.quote && Store.data.quotes[o.quote] ? `<a class="btn" href="#quote-${o.quote}">${svg("quote")} Quote</a>` : ""}
     ${o.id ? `<button class="btn ghost danger" data-act="delorder" data-id="${o.id}">${ui.del === "o-" + o.id ? "Tap again to delete" : "Delete"}</button>` : ""}</div>
-  ${G.on() ? `<p class="small muted" style="margin-top:8px">A "Collect balance" reminder goes to your Google Calendar on the due date.</p>` : ""}`;
+  ${G.on() || Cal.on() ? `<p class="small muted" style="margin-top:8px">A "Collect payment" reminder goes to your calendar on the due date.</p>` : ""}`;
 }
 
 /* ---------- expenses ---------- */
@@ -1074,11 +1075,14 @@ function vToday(){
   const w = weekStats(), t = targets();
   const pend = G.pendingCount();
   let html = "";
+  if (Cal.avail() && !Cal.on()) html += `<div class="banner"><b>Connect your phone calendar</b> so follow-ups, site visits and payment dates appear in your calendar (and Google Calendar), and today's meetings show here. <button class="btn sm" data-act="calon" style="margin-top:8px">Connect calendar</button></div>`;
+  else if (Cal.on() && Cal.pending()) html += `<div class="banner"><b>${Cal.pending()} calendar change${Cal.pending() > 1 ? "s" : ""} waiting.</b> <button class="btn sm" data-act="calsync" style="margin-left:6px">Save now</button></div>`;
   if (G.ready() && !G.on()) html += `<div class="banner"><b>Connect Google</b> to put follow-ups in your Calendar and back up to Drive automatically. <button class="btn sm" data-act="gconnect" style="margin-top:8px">Connect Google</button></div>`;
   else if (G.on() && pend) html += `<div class="banner"><b>${pend} change${pend > 1 ? "s" : ""} waiting for Google.</b> <button class="btn sm" data-act="gsync" style="margin-left:6px">Sync now</button></div>`;
   html += `<div class="tgrid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
     ${[["#activity","check","Log activity"],["#lead-new","users","New lead"],["#quote","quote","New quote"],["#survey","clip","Site survey"],["#expenses","pct","Expense"],["#notes","note","Notes"]].map(([h, i, l]) => `<a class="tcard" href="${h}" data-act="${h === "#quote" ? "newquote" : h === "#survey" ? "newsurvey" : ""}" style="min-height:84px;align-items:flex-start"><span class="ico">${svg(i)}</span><b style="font-size:13.5px">${l}</b></a>`).join("")}</div>`;
-  html += `<div class="sec-h"><h3>Calendar today</h3>${G.on() ? `<a class="small" href="https://calendar.google.com/calendar/u/0/r/day" target="_blank" rel="noopener">Open Calendar</a>` : ""}</div><div id="gtoday">${G.on() ? `<div class="empty" style="padding:14px">Loading your calendar…</div>` : `<div class="empty" style="padding:14px">${G.ready() ? "Connect Google to see today's meetings here." : "Set up Google in Settings to see today's meetings here."}</div>`}</div>`;
+  const calOn = Cal.on() || G.on();
+  html += `<div class="sec-h"><h3>Calendar today</h3></div><div id="gtoday">${calOn ? `<div class="empty" style="padding:14px">Loading your calendar…</div>` : `<div class="empty" style="padding:14px">${Cal.avail() ? "Connect your phone calendar to see today's meetings here." : "Today's meetings show here in the Android app, once its calendar is connected."}</div>`}</div>`;
   if (visits.length) html += `<div class="sec-h"><h3>Site visits (next 3 days)</h3></div><div class="list">${visits.map(l => `<a class="li" href="#lead-${l.id}">${svg("clip")}<span class="grow"><b>${esc(l.name)}${l.company ? " · " + esc(l.company) : ""}</b><span>${niceDate(l.visit)}${l.visitTime ? " " + l.visitTime : ""}${l.area ? " · " + esc(l.area) : ""}</span></span>${svg("chev")}</a>`).join("")}</div>`;
   html += `<div class="sec-h"><h3>Follow up</h3><a class="small" href="#leads">All leads</a></div>` + (due.length ? `<div class="list">${due.map(leadLi).join("")}</div>` : `<div class="empty" style="padding:14px">No follow-ups due. Set a follow-up date on each lead.</div>`);
   if (pay.length) html += `<div class="sec-h"><h3>Collect payments</h3><a class="small" href="#orders">Orders</a></div><div class="list">${pay.map(orderLi).join("")}</div>`;
@@ -1087,14 +1091,14 @@ function vToday(){
   return html;
 }
 async function loadTodayEvents(){
-  const el = $("#gtoday"); if (!el || !G.on()) return;
+  const el = $("#gtoday"); if (!el || !(Cal.on() || G.on())) return;
   try {
-    const ev = await G.todayEvents();
+    const ev = Cal.on() ? await Cal.todayEvents() : await G.todayEvents();
     if (!$("#gtoday")) return;
     $("#gtoday").innerHTML = ev.length ? `<div class="list">${ev.map(e => { const tm = e.start.dateTime ? new Date(e.start.dateTime).toLocaleTimeString("en-IN", {hour:"numeric", minute:"2-digit"}) : "All day";
       return `<a class="li" href="${esc(e.htmlLink || "#today")}" target="_blank" rel="noopener"><span class="mono small" style="width:64px;flex:none">${tm}</span><span class="grow"><b>${esc(e.summary || "(no title)")}</b>${e.location ? `<span>${esc(e.location)}</span>` : ""}</span></a>`; }).join("")}</div>`
       : `<div class="empty" style="padding:14px">Nothing on your calendar today.</div>`;
-  } catch(e){ if ($("#gtoday")) $("#gtoday").innerHTML = `<div class="empty" style="padding:14px">Couldn't reach Google Calendar. <button class="btn sm" data-act="gsync">Reconnect</button></div>`; }
+  } catch(e){ if ($("#gtoday")) $("#gtoday").innerHTML = `<div class="empty" style="padding:14px">Couldn't read your calendar. <button class="btn sm" data-act="${Cal.on() ? "calon" : "gsync"}">Try again</button></div>`; }
 }
 
 /* ---------- notes & settings ---------- */
@@ -1110,15 +1114,18 @@ function vSettings(){
   setHeader("Today", "Settings", "#today");
   const st = S(), t = targets(), g = st.google || {}, lb = st.lastBackup;
   const stale = !lb || (Date.now() - new Date(lb).getTime()) > 14 * 864e5;
-  return `<div class="sec-h" style="margin-top:4px"><h3>Google Calendar & Drive</h3>${G.on() ? `<span class="pill good">Connected</span>` : ""}</div>
+  return `<div class="sec-h" style="margin-top:4px"><h3>Calendar</h3>${Cal.on() ? `<span class="pill good">Connected</span>` : ""}</div>
+  <div class="block stack">${!Cal.avail() ? `<p class="small">Calendar sync works in the Android app. In the app, connect your phone calendar here.</p>`
+    : Cal.on() ? `<p class="small">Follow-ups, site visits and payment due dates are added to your phone's calendar with reminders. If your phone's calendar is your Google account, they appear in Google Calendar too. Today's meetings from your calendar show on the Today screen.</p><div class="btnbar" style="margin-top:0"><button class="btn pri" data-act="calsync">Update calendar now</button><button class="btn ghost danger" data-act="caloff">Turn off</button></div>`
+    : `<p class="small">Put follow-ups, site visits and payment due dates into your phone's calendar (and so your Google Calendar), and see today's meetings on the Today screen. Free, no setup.</p><div class="btnbar" style="margin-top:0"><button class="btn pri" data-act="calon">Connect calendar</button></div>`}</div>
+  ${G.ready() || G.on() ? `<div class="sec-h"><h3>Google Calendar & Drive</h3>${G.on() ? `<span class="pill good">Connected</span>` : ""}</div>
   <div class="block stack">
     ${!G.ready() ? `<p class="small">Google isn't set up yet. Follow "Connect Google" in the setup guide, then paste the Web client ID here.</p>` :
       G.on() ? `<p class="small">Signed in as <b>${esc(g.email || "your Google account")}</b>. Follow-ups, site visits and payment due dates go to your Google Calendar. Data backs up to Drive › Maya Traders › Backups${g.lastDrive ? ` (last: ${new Date(g.lastDrive).toLocaleString("en-IN", {day:"numeric", month:"short", hour:"numeric", minute:"2-digit"})})` : ""}. Quote PDFs go to Drive › Maya Traders › Quotes.</p>
       <div class="btnbar" style="margin-top:0"><button class="btn pri" data-act="gsync">Sync now</button><button class="btn" data-act="gbackup">Back up to Drive</button><button class="btn" data-act="grestorelist">Restore from Drive</button><button class="btn ghost danger" data-act="gdisconnect">Disconnect</button></div>
       <div id="gbackups"></div>`
       : `<p class="small">Connect to put follow-ups, site visits and payment reminders in your Google Calendar, see today's meetings on the Today screen, and back up to Google Drive automatically.</p><div class="btnbar" style="margin-top:0"><button class="btn pri" data-act="gconnect">Connect Google</button></div>`}
-    <details class="how"><summary>Advanced: Google client ID</summary><div class="field" style="margin-top:8px"><label for="g-cid">Web client ID</label><input class="inp mono" id="g-cid" value="${esc(st.gClientId || "")}" placeholder="${esc(CFG.googleWebClientId || "xxxx.apps.googleusercontent.com")}"></div><button class="btn sm" data-act="savecid" style="margin-top:8px">Save client ID</button></details>
-  </div>
+  </div>` : ""}
   <div class="sec-h"><h3>Weekly targets</h3></div>
   <form class="block" id="tgtform" onsubmit="return false"><div class="grid3">${F.n("meet", "Meetings", t.meet)}${F.n("prop", "Proposals", t.prop)}${F.n("order", "Orders", t.order)}</div><button class="btn" data-act="savetargets" style="margin-top:10px">${svg("check")} Save targets</button></form>
   <div class="sec-h"><h3>My details on quotes</h3></div><form class="block stack" id="setform" onsubmit="return false"><div class="grid2">
@@ -1126,7 +1133,7 @@ function vSettings(){
     <button class="btn" data-act="savesettings">${svg("check")} Save details</button></form>
   <div class="sec-h"><h3>Backup file</h3></div>
   <div class="block stack">${stale && !G.on() ? `<div class="banner" style="margin:0"><b>${lb ? "Last backup " + niceDate(lb.slice(0, 10)) + "." : "No backup yet."}</b> Everything is saved on this phone. Keep a backup in Google Drive.</div>` : ""}
-    <p class="small">A backup file holds your leads, quotes, orders, partners, expenses, surveys, prices, notes and photos.</p>
+    <p class="small">A backup file holds your leads, quotes, orders, partners, expenses, surveys, prices, notes and photos. In the Android app, tap Make backup file, then choose <b>Drive</b> in the share menu to save it to your Google Drive.</p>
     <div class="btnbar" style="margin-top:0"><button class="btn" data-act="backup">${svg("copy")} Make backup file</button>
     <label class="btn" for="restorefile">Restore from file<input type="file" id="restorefile" accept="application/json,.json" data-in="restore" hidden></label></div>
     ${ui.restoreFile ? `<div class="banner"><b>Replace the data on this phone</b> with "${esc(ui.restoreFile.name || "the Drive backup")}"? Anything added since that backup will be lost.<div class="btnbar"><button class="btn pri sm" data-act="restoreok">Yes, restore</button><button class="btn sm" data-act="restorecancel">Cancel</button></div></div>` : ""}</div>
@@ -1135,6 +1142,66 @@ function vSettings(){
     <div class="row small muted" style="justify-content:space-between"><span>Maya Traders · version <span class="mono">${esc(BUILD.slice(0, 7))}</span></span><button class="btn sm ghost" data-act="checkupdate">Check for updates</button></div></div>`;
 }
 
+/* ---------- phone calendar (Android app) ---------- */
+const Cal = {
+  timer: null, running: false,
+  plug(){ return isNative() && window.Capacitor.Plugins ? window.Capacitor.Plugins.CapacitorCalendar : null; },
+  avail(){ return !!this.plug(); },
+  on(){ return !!(S().devCal && S().devCal.on) && this.avail(); },
+  async enable(){
+    const C = this.plug(); if (!C){ toast("Phone calendar works in the Android app"); return; }
+    let ok = false;
+    try { const r = await C.requestFullCalendarAccess(); ok = JSON.stringify(r || {}).includes("granted"); } catch(e){}
+    if (!ok){ try { const r = await C.requestAllPermissions(); ok = JSON.stringify(r || {}).includes("granted"); } catch(e){} }
+    if (!ok){ toast("Allow calendar access to use this"); return; }
+    S().devCal = {on: true};
+    Object.values(Store.data.leads).forEach(l => { if (l.next || l.visit) l.cDirty = true; });
+    Object.values(Store.data.orders).forEach(o => { if (o.due) o.cDirty = true; });
+    Store.saveLocal(); toast("Phone calendar connected"); rerender(); this.flush(true);
+  },
+  disable(){ S().devCal = {on: false}; Store.saveLocal(); toast("Phone calendar turned off"); rerender(); },
+  pending(){ return Object.values(Store.data.leads).filter(l => l.cDirty).length + Object.values(Store.data.orders).filter(o => o.cDirty).length + (S().cDel || []).length; },
+  queueDelete(...ids){ const d = S().cDel || (S().cDel = []); ids.filter(Boolean).forEach(i => d.push(i)); },
+  soon(){ if (!this.on()) return; clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(false), 1500); },
+  ev(kind, x){
+    const b = G.ev(kind, x);
+    const defT = kind === "visit" ? "11:00" : "10:00";
+    const date = kind === "follow" ? x.next : kind === "visit" ? x.visit : x.due;
+    const time = (kind === "follow" ? x.nextTime : kind === "visit" ? x.visitTime : "") || defT;
+    const [h, m] = time.split(":").map(Number);
+    const s = new Date(date + "T00:00:00"); s.setHours(h, m, 0, 0);
+    const dur = kind === "visit" ? 90 : 30;
+    const start = s.getTime(), end = start + dur * 60000;
+    return {title: b.summary, startDate: start, endDate: end, from: start, to: end, isAllDay: false, location: b.location || "", description: b.description, notes: b.description, alertOffsetInMinutes: kind === "visit" ? 60 : 15};
+  },
+  async syncOne(x, kind, key, date){
+    const C = this.plug(), id = x[key];
+    if (!date){ if (id){ try { await C.deleteEventsById({ids: [id]}); } catch(e){} delete x[key]; } return; }
+    const body = this.ev(kind, x);
+    if (id){ try { await C.modifyEvent({id, ...body}); return; } catch(e){ try { await C.deleteEventsById({ids: [id]}); } catch(_){} } }
+    const r = await C.createEvent(body);
+    x[key] = r && (r.id || r.result) || "";
+  },
+  async flush(interactive){
+    if (!this.on() || this.running) return;
+    this.running = true; let errs = 0;
+    for (const id of (S().cDel || []).slice()){ try { await this.plug().deleteEventsById({ids: [id]}); } catch(e){} S().cDel = S().cDel.filter(x => x !== id); }
+    for (const l of Object.values(Store.data.leads)){ if (!l.cDirty) continue; const closed = ["Won","Lost"].includes(l.stage);
+      try { await this.syncOne(l, "follow", "cFollow", closed ? "" : l.next); await this.syncOne(l, "visit", "cVisit", l.visit); delete l.cDirty; } catch(e){ errs++; } }
+    for (const o of Object.values(Store.data.orders)){ if (!o.cDirty) continue;
+      try { await this.syncOne(o, "pay", "cDue", orderTotals(o).bal > 0 ? o.due : ""); delete o.cDirty; } catch(e){ errs++; } }
+    Store.saveLocal(); this.running = false;
+    if (interactive) toast(errs ? "Some events didn't save. Try again." : "Calendar updated");
+    if (cur === "today" || cur === "settings") rerender();
+  },
+  async todayEvents(){
+    const s = new Date(today() + "T00:00:00").getTime(), e = s + 864e5 - 1;
+    const r = await this.plug().listEventsInRange({from: s, to: e, startDate: s, endDate: e});
+    const list = (r && (r.result || r.events)) || [];
+    return list.map(x => ({summary: x.title, location: x.location, start: x.isAllDay ? {} : {dateTime: new Date(Number(x.startDate)).toISOString()}, _t: Number(x.startDate) || 0}))
+      .sort((a, b) => a._t - b._t);
+  }
+};
 /* ---------- Google ---------- */
 const SCOPES = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/drive.file", "email", "profile"];
 const CAL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
@@ -1143,7 +1210,7 @@ const UPL = "https://www.googleapis.com/upload/drive/v3/files";
 const G = {
   tok: null, exp: 0, inited: false, timer: null, bTimer: null, running: false,
   clientId(){ return (S().gClientId || "").trim() || CFG.googleWebClientId || ""; },
-  ready(){ return !!this.clientId(); },
+  ready(){ return !!this.clientId() && !isNative(); },
   on(){ return !!(S().google && S().google.on); },
   native(){ return isNative() && window.Capacitor.Plugins && window.Capacitor.Plugins.GoogleAuth ? window.Capacitor.Plugins.GoogleAuth : null; },
   keep(tok, secs){ this.tok = tok; this.exp = Date.now() + (secs || 3300) * 1000; try { sessionStorage.setItem("mt-gtok", JSON.stringify({tok, exp:this.exp})); } catch(e){} },
@@ -1200,7 +1267,7 @@ const G = {
   pendingCount(){
     return Object.values(Store.data.leads).filter(l => l.gDirty).length + Object.values(Store.data.orders).filter(o => o.gDirty).length + (S().gDel || []).length + (S().gBackupDue ? 1 : 0);
   },
-  soon(){ if (!this.on()) return; S().gBackupDue = true; clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(false), 2500); },
+  soon(){ Cal.soon(); if (!this.on()) return; S().gBackupDue = true; clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(false), 2500); },
   ev(kind, x){
     const firm = S().firm || "Maya Traders";
     let date, time, dur = 60, summary, desc = [];
@@ -1378,15 +1445,15 @@ document.addEventListener("click", e => {
     case "feepaid": { const o = Store.data.orders[id]; o.feePaid = !o.feePaid; Store.saveLocal(); G.soon(); rerender(); break; }
     case "neworder": ui.order = newOrder(); break;
     case "quotewon": { const q = ui.quote; if (!q.id){ toast("Save the quote first"); return; } const o = newOrder(q); o.id = uid(); Store.data.orders[o.id] = o; logActivity("order", q.lead, q.no); q.won = o.id; Store.data.quotes[q.id].won = o.id;
-      if (q.lead && Store.data.leads[q.lead]) { Store.data.leads[q.lead].stage = "Won"; Store.data.leads[q.lead].gDirty = true; }
+      if (q.lead && Store.data.leads[q.lead]) { Store.data.leads[q.lead].stage = "Won"; Store.data.leads[q.lead].gDirty = true; Store.data.leads[q.lead].cDirty = true; }
       Store.saveLocal(); G.soon(); ui.order = null; toast("Order created"); location.hash = "#order-" + o.id; break; }
     case "addpay": { const amt = num($("#pay-amt").value); if (!amt){ toast("Enter the amount"); return; } ui.order.payments = ui.order.payments || []; ui.order.payments.push({amount: amt, date: $("#pay-date").value || today(), mode: $("#pay-mode").value});
-      if (ui.order.id){ Store.data.orders[ui.order.id] = JSON.parse(JSON.stringify(ui.order)); Store.data.orders[ui.order.id].gDirty = true; Store.saveLocal(); G.soon(); } rerender(); toast("Payment added"); break; }
+      if (ui.order.id){ Store.data.orders[ui.order.id] = JSON.parse(JSON.stringify(ui.order)); Store.data.orders[ui.order.id].gDirty = true; Store.data.orders[ui.order.id].cDirty = true; Store.saveLocal(); G.soon(); } rerender(); toast("Payment added"); break; }
     case "delpay": ui.order.payments.splice(Number(b.dataset.i), 1); if (ui.order.id){ Store.data.orders[ui.order.id] = JSON.parse(JSON.stringify(ui.order)); Store.saveLocal(); } rerender(); break;
-    case "saveorder": { const o = ui.order; if (!o.client && !o.lead){ toast("Add the client name"); return; } const isNew = !o.id; if (isNew) o.id = uid(); o.gDirty = true;
+    case "saveorder": { const o = ui.order; if (!o.client && !o.lead){ toast("Add the client name"); return; } const isNew = !o.id; if (isNew) o.id = uid(); o.gDirty = true; o.cDirty = true;
       Store.data.orders[o.id] = JSON.parse(JSON.stringify(o)); if (isNew) logActivity("order", o.lead, o.no); Store.saveLocal(); G.soon(); toast("Order saved");
       if (location.hash !== "#order-" + o.id) location.hash = "#order-" + o.id; else rerender(); break; }
-    case "delorder": { if (!guard("o-" + id)){ b.textContent = "Tap again to delete"; return; } const o = Store.data.orders[id]; G.queueDelete(o && o.gDue); delete Store.data.orders[id]; ui.order = null; Store.saveLocal(); G.soon(); location.hash = "#orders"; break; }
+    case "delorder": { if (!guard("o-" + id)){ b.textContent = "Tap again to delete"; return; } const o = Store.data.orders[id]; G.queueDelete(o && o.gDue); Cal.queueDelete(o && o.cDue); delete Store.data.orders[id]; ui.order = null; Store.saveLocal(); G.soon(); location.hash = "#orders"; break; }
     case "addexp": { const f = $("#expform"), v = {}; $$("input,select", f).forEach(el => { if (el.name) v[el.name] = el.value; }); const amt = num(v.amount); if (!amt){ toast("Enter the amount"); return; }
       const xid = uid(); Store.data.expenses[xid] = {id: xid, amount: amt, date: v.date || today(), cat: v.cat, note: v.note.trim()}; Store.saveLocal(); G.soon(); ui.expMonth = (v.date || today()).slice(0, 7); toast("Expense added"); rerender(); break; }
     case "delexp": if (!guard("e-" + id)){ b.innerHTML = svg("check"); toast("Tap again to delete"); return; } delete Store.data.expenses[id]; Store.saveLocal(); rerender(); break;
@@ -1394,6 +1461,9 @@ document.addEventListener("click", e => {
     case "savetargets": { const v = readForm($("#tgtform")); S().targets = {meet: v.meet || 0, prop: v.prop || 0, order: v.order || 0}; Store.saveLocal(); toast("Targets saved"); break; }
     case "savecid": S().gClientId = $("#g-cid").value.trim(); Store.saveLocal(); G.inited = false; toast("Client ID saved"); rerender(); break;
     case "gconnect": G.connect(); break;
+    case "calon": Cal.enable(); break;
+    case "caloff": Cal.disable(); break;
+    case "calsync": Cal.flush(true); break;
     case "gdisconnect": G.disconnect(); break;
     case "gsync": G.flush(true); break;
     case "gbackup": toast("Backing up…"); G.token(true).then(() => G.backup()).then(() => { toast("Backed up to Drive"); rerender(); }).catch(() => toast("Couldn't back up to Drive")); break;
@@ -1415,7 +1485,7 @@ document.addEventListener("change", e => {
     if (f === "partner"){ const p = Store.data.partners[el.value]; if (p && ui.order.fee == null) { ui.order.fee = Math.round(p.fixed ? num(p.fixed) : (num(ui.order.base) || 0) * (num(p.pct) || 0) / 100); rerender(); } } }
   if (el.dataset.in === "actradio"){ $$("#actform .chip").forEach(c => c.classList.toggle("on", c.contains(el))); }
 });
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && G.on() && G.pendingCount()) G.flush(false); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "visible") return; if (G.on() && G.pendingCount()) G.flush(false); if (Cal.on() && Cal.pending()) Cal.flush(false); if (cur === "today") loadTodayEvents(); });
 
 /* ---------- after render hooks ---------- */
 function after(h){
@@ -1451,7 +1521,7 @@ document.addEventListener("click", e => {
     case "newlead": ui.newLead = {id:"", stage:"New", type:"builder", products:[b.dataset.p]}; break;
     case "newleadtype": ui.newLead = {id:"", stage:"New", type:b.dataset.v, products:[]}; break;
     case "savelead": saveLead(); break;
-    case "dellead": if (!delGuard("lead-"+id)){ b.textContent = "Tap again to delete"; return; } { const l = Store.data.leads[id]; if (l) G.queueDelete(l.gFollow, l.gVisit); } Store.deleteItem("leads", id); G.soon(); toast("Lead deleted"); location.hash = "#leads"; break;
+    case "dellead": if (!delGuard("lead-"+id)){ b.textContent = "Tap again to delete"; return; } { const l = Store.data.leads[id]; if (l){ G.queueDelete(l.gFollow, l.gVisit); Cal.queueDelete(l.cFollow, l.cVisit); } } Store.deleteItem("leads", id); G.soon(); toast("Lead deleted"); location.hash = "#leads"; break;
     case "newquote": ui.quote = newQuote(); break;
     case "quotefor": ui.quote = newQuote(Store.data.leads[id]); break;
     case "surveyfor": { const l = Store.data.leads[id]; ui.survey = {id:"", tpl:"general", client: l.company || l.name, lead: id, date: today(), items:{}, notes:""}; break; }
@@ -1512,7 +1582,7 @@ $("#back").addEventListener("click", () => { const to = $("#back").dataset.to; i
 /* ---------- boot ---------- */
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); ui.installEvt = e; if (cur === "notes") rerender(); });
 route();
-Store.init().then(() => { rerender(); setSync("ok"); if (G.on()) setTimeout(() => G.flush(false), 1500); });
+Store.init().then(() => { rerender(); setSync("ok"); if (G.on()) setTimeout(() => G.flush(false), 1500); if (Cal.on()) setTimeout(() => Cal.flush(false), 1200); });
 if ("serviceWorker" in navigator && location.protocol === "https:"){
   navigator.serviceWorker.register("sw.js").catch(() => {});
   let had = !!navigator.serviceWorker.controller;
