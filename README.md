@@ -1,4 +1,4 @@
-# Maya Traders Handbook
+# Maya Traders
 
 A personal sales app for Maya Traders (Delhi NCR). It covers 15 product lines in selling order, short EEE lessons, site calculators, a leads tracker, a quote maker with WhatsApp sharing, site-survey checklists and notes.
 

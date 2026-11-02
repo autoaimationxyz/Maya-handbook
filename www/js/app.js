@@ -172,7 +172,7 @@ const ROOT = {products:1, learn:1, tools:1, sell:1, notes:1};
 function setHeader(eyebrow, title, back){
   $("#eyebrow").textContent = eyebrow; $("#ttl").textContent = title;
   $("#back").classList.toggle("on", !!back); $("#back").dataset.to = back || "";
-  document.title = "Maya Traders Handbook";
+  document.title = "Maya Traders";
 }
 function route(){
   const h = (location.hash || "#products").slice(1) || "products";
@@ -222,7 +222,7 @@ function pItem(p){
     <span class="rng">${from}<br>${r0 ? esc(r0.unit) : ""}</span></a>`;
 }
 function vProducts(){
-  setHeader("Maya Traders · Sales handbook", "Products");
+  setHeader("Maya Traders", "Products");
   const q = ui.q.trim();
   let html = `<div class="search" style="margin-bottom:6px">${svg("search")}<input id="q" type="search" placeholder="Search products, lessons, tools" value="${esc(ui.q)}" autocomplete="off" aria-label="Search"></div>`;
 
