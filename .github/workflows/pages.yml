@@ -8,6 +8,7 @@ on:
     paths:
       - "www/**"
       - "scripts/stamp.js"
+      - "app.config.json"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

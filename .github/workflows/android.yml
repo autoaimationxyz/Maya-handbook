@@ -11,6 +11,7 @@ on:
       - "package.json"
       - "assets/**"
       - "scripts/cap-config.js"
+      - "app.config.json"
       - ".github/workflows/android.yml"
 
 permissions:
@@ -54,6 +55,13 @@ jobs:
 
       - name: Create Android project
         run: npx cap add android
+
+      - name: Google sign-in client id
+        run: |
+          CID=$(node -p "require('./app.config.json').googleWebClientId || 'not-set'")
+          STR=android/app/src/main/res/values/strings.xml
+          grep -q server_client_id "$STR" || sed -i "s#</resources>#    <string name=\"server_client_id\">$CID</string>\n</resources>#" "$STR"
+          cat "$STR"
 
       - name: Icons and splash screen
         continue-on-error: true

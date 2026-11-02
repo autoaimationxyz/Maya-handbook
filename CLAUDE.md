@@ -13,6 +13,12 @@ This repo is Maya Traders' personal sales handbook app. The owner is a BTech EEE
 4. Commit with a clear message and push to `main`. `pages.yml` republishes the site in about a minute, and the phone app picks it up on its next open.
 5. Only bump the APK (push to `package.json` or `assets/`, or run *Build Android app*) when the native shell changes.
 
+## Config
+
+- `app.config.json` holds the app name, the Android package (`in.mayatraders.app`) and the Google Web client ID. Changing it rebuilds both the site and the APK.
+- Google sign-in in the APK uses `@codetrix-studio/capacitor-google-auth`. The web uses Google Identity Services. Calendar and Drive calls are plain REST in the `G` object in `app.js`.
+- Stored data keys: `products, progress, notes, settings, leads, quotes, surveys, orders, partners, expenses, activities`. Photos live in IndexedDB (`maya-photos`).
+
 ## Rules
 
 - The owner's own prices, leads and notes live on his phone, not in the repo. Default `prices` in product files are market estimates. Say so in `priceNote` and give the source month.

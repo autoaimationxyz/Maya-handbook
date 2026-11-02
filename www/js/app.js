@@ -65,7 +65,8 @@ const inrS = n => {
 };
 const fmt = (n, d=1) => (n == null || !isFinite(n)) ? "—" : Number(n).toLocaleString("en-IN", {maximumFractionDigits:d, minimumFractionDigits:0});
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
-const today = () => new Date().toISOString().slice(0,10);
+const localISO = d => new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+const today = () => localISO(new Date());
 const niceDate = d => { if (!d) return ""; const x = new Date(d + "T00:00:00"); return x.toLocaleDateString("en-IN", {day:"numeric", month:"short"}); };
 const nextUp = (v, arr) => arr.find(s => s >= v - 1e-9) ?? arr[arr.length-1];
 
@@ -86,7 +87,7 @@ const LS = "maya-traders-v1";
 const BUILD = "__BUILD__";
 const Store = {
   mode: "local",
-  data: {products:{}, progress:{lessons:{}}, notes:{items:[]}, settings:{}, leads:{}, quotes:{}, surveys:{}},
+  data: {products:{}, progress:{lessons:{}}, notes:{items:[]}, settings:{}, leads:{}, quotes:{}, surveys:{}, orders:{}, partners:{}, expenses:{}, activities:{}},
   loadLocal(){ try { const j = JSON.parse(localStorage.getItem(LS) || "null"); if (j) for (const k in this.data) if (j[k]) this.data[k] = j[k]; } catch(e){} },
   saveLocal(){
     try { localStorage.setItem(LS, JSON.stringify(this.data)); setSync("ok"); }
@@ -107,7 +108,7 @@ function setSync(s){
   const last = (Store.data.settings || {}).lastBackup;
   const stale = !last || (Date.now() - new Date(last).getTime()) > 14*864e5;
   el.className = "sync " + (s === "err" ? "local" : stale ? "local" : "ok");
-  el.querySelector("span").textContent = s === "err" ? "Storage full" : stale ? "Back up" : "Saved";
+  el.querySelector("span").textContent = s === "err" ? "Storage full" : stale ? "Back up" : (typeof G !== "undefined" && G.on() ? "Synced" : "Saved");
   el.title = stale ? "Saved on this phone. Make a backup from Notes." : "Saved on this phone; backed up " + niceDate(last.slice(0,10));
 }
 /* photos live in IndexedDB on the phone */
@@ -124,12 +125,15 @@ async function hydratePhotos(){ for (const img of $$("img[data-ph]")) { const u 
 const blobToData = b => new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
 const dataToBlob = async d => (await fetch(d)).blob();
 const isNative = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-async function makeBackup(){
-  toast("Preparing backup…");
+async function backupJSON(){
   const photos = {};
   for (const p of Object.values(Store.data.products)) for (const id of (p.photos || [])) { const b = await Photos.get(id); if (b) photos[id] = await blobToData(b); }
+  return JSON.stringify({app:"maya-traders", v:1, at:new Date().toISOString(), data:Store.data, photos});
+}
+async function makeBackup(){
+  toast("Preparing backup…");
   const name = "maya-backup-" + today() + ".json";
-  const json = JSON.stringify({app:"maya-traders", v:1, at:new Date().toISOString(), data:Store.data, photos});
+  const json = await backupJSON();
   try {
     if (isNative() && window.Capacitor.Plugins.Filesystem && window.Capacitor.Plugins.Share){
       const {Filesystem, Share} = window.Capacitor.Plugins;
@@ -139,16 +143,18 @@ async function makeBackup(){
       const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([json], {type:"application/json"})); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     }
     Store.data.settings.lastBackup = new Date().toISOString(); Store.saveLocal(); toast("Backup ready: keep it in Google Drive");
-    if (cur === "notes") rerender();
+    if (cur === "settings") rerender();
   } catch(e){ if (!(e && /cancel/i.test(String(e.message||e)))) toast("Couldn't make the backup file"); }
 }
 async function restoreBackup(file){
   try {
-    const j = JSON.parse(await file.text());
+    const j = file.json || JSON.parse(await file.text());
     if (j.app !== "maya-traders" || !j.data) { toast("That file isn't a Maya Traders backup"); return; }
     for (const [id, d] of Object.entries(j.photos || {})) await Photos.put(id, await dataToBlob(d));
+    const keepG = (Store.data.settings || {}).google, keepCid = (Store.data.settings || {}).gClientId;
     for (const k in Store.data) if (j.data[k]) Store.data[k] = j.data[k];
-    Store.saveLocal(); toast("Backup restored from " + niceDate((j.at||"").slice(0,10))); location.hash = "#products"; route();
+    if (keepG) Store.data.settings.google = keepG; if (keepCid) Store.data.settings.gClientId = keepCid;
+    Store.saveLocal(); toast("Backup restored from " + niceDate((j.at||"").slice(0,10))); location.hash = "#today"; route();
   } catch(e){ toast("Couldn't read that backup file"); }
 }
 /* ---------- product state ---------- */
@@ -166,7 +172,7 @@ const margin = (c, s) => (c != null && s) ? (s - c) / s * 100 : null;
 /* ---------- router ---------- */
 let cur = "products";
 const ui = {ptab:{}, pfilter:"all", q:"", leadFilter:"open", quote:null, survey:null, upsRows:null, del:null};
-const TAB_OF = h => /^(p-|products|pricebook)/.test(h) ? "products" : /^(l-|learn)/.test(h) ? "learn" : /^(t-|tools)/.test(h) ? "tools" : /^(notes)/.test(h) ? "notes" : "sell";
+const TAB_OF = h => /^(p-|products|pricebook)/.test(h) ? "products" : /^(l-|learn)/.test(h) ? "learn" : /^(t-|tools)/.test(h) ? "tools" : /^(today|notes|settings|activity|expenses)$/.test(h) ? "today" : "sell";
 const ROOT = {products:1, learn:1, tools:1, sell:1, notes:1};
 
 function setHeader(eyebrow, title, back){
@@ -175,14 +181,22 @@ function setHeader(eyebrow, title, back){
   document.title = "Maya Traders";
 }
 function route(){
-  const h = (location.hash || "#products").slice(1) || "products";
+  const h = (location.hash || "#today").slice(1) || "today";
   cur = h;
   const tab = TAB_OF(h);
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
   const v = $("#view");
   let html = "";
   try {
-    if (h === "products") html = vProducts();
+    if (h === "today") html = vToday();
+    else if (h === "settings") html = vSettings();
+    else if (h === "activity") html = vActivity();
+    else if (h === "expenses") html = vExpenses();
+    else if (h === "orders") html = vOrders();
+    else if (h.startsWith("order-")) html = vOrder(h.slice(6));
+    else if (h === "partners") html = vPartners();
+    else if (h.startsWith("partner-")) html = vPartner(h.slice(8));
+    else if (h === "products") html = vProducts();
     else if (h.startsWith("p-")) html = vProduct(h.slice(2));
     else if (h === "pricebook") html = vPriceBook();
     else if (h === "learn") html = vLearn();
@@ -197,7 +211,7 @@ function route(){
     else if (h === "survey" || h.startsWith("survey-")) html = vSurvey(h.slice(7));
     else if (h.startsWith("prep-")) html = vPrep(h.slice(5));
     else if (h === "notes") html = vNotes();
-    else html = vProducts();
+    else html = vToday();
   } catch(e){ console.error(e); html = `<div class="empty"><b>Something went wrong on this page.</b>Go back and try again.</div>`; }
   v.innerHTML = html;
   if (!route.keepScroll) window.scrollTo(0, 0);
@@ -695,7 +709,8 @@ function vSell(){
   const due = open.filter(l => l.next && l.next <= today()).sort((a,b)=>a.next.localeCompare(b.next));
   const quotes = Object.values(Store.data.quotes).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   let html = `<div class="stat"><div><b>${open.length}</b><span>Open leads</span></div><div><b style="color:${due.length?"var(--copper)":"inherit"}">${due.length}</b><span>Follow-ups due</span></div><div><b>${quotes.length}</b><span>Quotes</span></div></div>
-    <div class="btnbar"><a class="btn pri" href="#lead-new">${svg("plus")} New lead</a><a class="btn" href="#quote" data-act="newquote">${svg("quote")} New quote</a><a class="btn" href="#survey" data-act="newsurvey">${svg("clip")} Site survey</a></div>`;
+    <div class="btnbar"><a class="btn pri" href="#lead-new">${svg("plus")} New lead</a><a class="btn" href="#quote" data-act="newquote">${svg("quote")} New quote</a><a class="btn" href="#survey" data-act="newsurvey">${svg("clip")} Site survey</a></div>
+    <div class="list" style="margin-top:12px">${[["#leads","users","Leads",open.length+" open"],["#orders","bag","Orders & payments",inrS(Object.values(Store.data.orders).reduce((s,o)=>s+orderTotals(o).bal,0))+" to collect"],["#partners","users","Referral partners",Object.keys(Store.data.partners).length+" partners"],["#quotes","quote","Quotes",quotes.length+" saved"]].map(([h,i,l,s])=>`<a class="li" href="${h}">${svg(i)}<span class="grow"><b>${l}</b><span>${s}</span></span>${svg("chev")}</a>`).join("")}</div>`;
   html += `<div class="sec-h"><h3>Reasons to call this season</h3><span class="eyebrow">Nov 2026</span></div><div class="list">${(window.DRIVERS||[]).map(d => `<details class="li" style="display:block"><summary style="cursor:pointer;list-style:none"><b style="font-size:14.5px">${esc(d.t)}</b><br><span class="small muted">${esc(d.who)}</span></summary><p class="small" style="margin-top:6px">${esc(d.d)}</p></details>`).join("")}</div>`;
   html += `<div class="sec-h"><h3>Follow up today</h3><a class="small" href="#leads">All leads</a></div>`;
   html += due.length ? `<div class="list">${due.map(leadLi).join("")}</div>` : `<div class="empty"><b>Nothing due</b>Leads with a follow-up date of today or earlier show here.</div>`;
@@ -737,12 +752,19 @@ function vLead(id){
     ${F.sel("type","Customer type",PB.map(b=>[b.id,b.name]).concat([["other","Other"]]),l.type||"builder")}
     <div class="field"><span class="lbl">Interested in</span><div class="chips" style="flex-wrap:wrap;overflow:visible;padding-top:2px">${P.map(p=>`<button type="button" class="chip ${prods.includes(p.id)?"sel":""}" data-act="leadprod" data-v="${p.id}">${esc(p.name.split("(")[0].trim())}</button>`).join("")}</div></div>
     <div class="grid2">${F.sel("stage","Stage",LSTAGES,l.stage||"New")}${txt("value","Likely value ₹",l.value,'inputmode="decimal"')}
-    <div class="field"><label for="f-next">Next follow-up</label><input class="inp" type="date" id="f-next" name="next" value="${esc(l.next||"")}"></div>${txt("source","Referred by",l.source)}</div>
+    <div class="field"><label for="f-next">Next follow-up</label><input class="inp" type="date" id="f-next" name="next" value="${esc(l.next||"")}"></div>
+    <div class="field"><label for="f-nextTime">Time (optional)</label><input class="inp" type="time" id="f-nextTime" name="nextTime" value="${esc(l.nextTime||"")}"></div>
+    <div class="field"><label for="f-visit">Site visit date</label><input class="inp" type="date" id="f-visit" name="visit" value="${esc(l.visit||"")}"></div>
+    <div class="field"><label for="f-visitTime">Visit time</label><input class="inp" type="time" id="f-visitTime" name="visitTime" value="${esc(l.visitTime||"")}"></div>
+    <div class="field"><label for="f-partner">Referred by (partner)</label><select class="inp" id="f-partner" name="partner"><option value="">None</option>${Object.values(Store.data.partners).map(p=>`<option value="${p.id}" ${l.partner===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div>
+    ${txt("source","Or referred by (name)",l.source)}</div>
     <div class="field"><label for="f-notes">Notes</label><textarea class="inp" id="f-notes" name="notes" placeholder="What they need, who decides, budget, next step…">${esc(l.notes||"")}</textarea></div>
     </div></form>
     <div class="btnbar"><button class="btn pri" data-act="savelead">${svg("check")} Save lead</button>
-    ${l.id ? `<a class="btn" href="#quote" data-act="quotefor" data-id="${l.id}">${svg("quote")} Quote</a><a class="btn" href="#survey" data-act="surveyfor" data-id="${l.id}">${svg("clip")} Survey</a>` : ""}
+    ${l.id ? `<button class="btn" data-act="logfor" data-id="${l.id}">${svg("check")} Log meeting</button><a class="btn" href="#quote" data-act="quotefor" data-id="${l.id}">${svg("quote")} Quote</a><a class="btn" href="#survey" data-act="surveyfor" data-id="${l.id}">${svg("clip")} Survey</a>` : ""}
     ${l.phone ? `<a class="btn" href="${waLink(l.phone,"Hello "+(l.name||"")+", this is from Maya Traders.")}" target="_blank" rel="noopener">${svg("wa")} WhatsApp</a>` : ""}</div>
+    ${l.id && !G.on() && (l.next || l.visit) ? `<div class="btnbar">${l.next ? `<a class="btn sm" target="_blank" rel="noopener" href="${gcalLink("Follow up: " + l.name, l.next, l.nextTime, l.phone || "")}">Add follow-up to Calendar</a>` : ""}${l.visit ? `<a class="btn sm" target="_blank" rel="noopener" href="${gcalLink("Site visit: " + l.name + (l.area ? ", " + l.area : ""), l.visit, l.visitTime, l.phone || "")}">Add visit to Calendar</a>` : ""}</div>` : ""}
+    ${l.id && G.on() && (l.next || l.visit) ? `<p class="small muted" style="margin-top:8px">${l.gDirty ? "Waiting to sync to Google Calendar." : "In your Google Calendar."}</p>` : ""}
     ${l.phone ? `<p class="small muted" style="margin-top:8px">Phone: <a class="mono" href="tel:${esc(l.phone.replace(/[^\d+]/g,""))}">${esc(l.phone)}</a> <button class="btn sm ghost" data-act="copy" data-text="${esc(l.phone)}">Copy</button></p>` : ""}
     ${l.id ? `<div class="btnbar"><button class="btn sm ghost danger" data-act="dellead" data-id="${l.id}">${ui.del==="lead-"+l.id?"Tap again to delete":"Delete lead"}</button></div>` : ""}
     ${l.type && PB.find(b=>b.id===l.type) ? `<div class="sec-h"><h3>Prep for this meeting</h3></div><a class="li list" href="#prep-${l.type}" style="border:1px solid var(--line);border-radius:12px">${svg("users")}<span class="grow"><b>${esc(PB.find(b=>b.id===l.type).name)} playbook</b><span>Opening line, questions, what to pitch</span></span>${svg("chev")}</a>` : ""}`;
@@ -756,9 +778,9 @@ function saveLead(){
   if (!v.name.trim()){ toast("Add a name first"); $("#f-name").focus(); return; }
   const id = f.dataset.id || uid();
   const old = Store.data.leads[id] || {created: today()};
-  Store.data.leads[id] = {...old, ...v, id, value: num(v.value), products: ui.leadDraftProducts || [], updated: today()};
+  Store.data.leads[id] = {...old, ...v, id, value: num(v.value), products: ui.leadDraftProducts || [], updated: today(), gDirty: true};
   ui.newLead = null;
-  Store.saveItem("leads", id); toast("Lead saved");
+  Store.saveItem("leads", id); G.soon(); toast("Lead saved");
   location.hash = "#lead-" + id; if (f.dataset.id) rerender();
 }
 function vPrep(id){
@@ -805,9 +827,11 @@ function vQuote(id){
     <div id="qtot">${qTotals(q)}</div></div>
     <div class="block"><h3>Terms</h3><textarea class="inp" data-in="q" data-f="terms" rows="4">${esc(q.terms)}</textarea></div>
     <div class="block"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Message preview</h3><span class="small muted">sent as text</span></div><div class="preview" id="qprev" style="margin-top:8px">${esc(quoteText(q))}</div>
-    <div class="btnbar"><button class="btn pri" data-act="savequote">${svg("check")} Save quote</button><button class="btn" data-act="copyquote">${svg("copy")} Copy</button>
+    <div class="btnbar"><button class="btn pri" data-act="savequote">${svg("check")} Save quote</button><button class="btn" data-act="qpdf">${svg("quote")} PDF</button>${G.on() ? `<button class="btn" data-act="qdrive">Save PDF to Drive</button>` : ""}<button class="btn" data-act="copyquote">${svg("copy")} Copy</button>
     <a class="btn" id="qwa" href="${waLink(q.phone, quoteText(q))}" target="_blank" rel="noopener">${svg("wa")} WhatsApp</a></div>
-    <p class="small muted" style="margin-top:8px">WhatsApp opens with the message ready; check it before sending. If it doesn't open, use Copy and paste it in the chat.</p></div>
+    <div id="qpdf">${pdfLinkHtml(q)}</div>
+    <p class="small muted" style="margin-top:8px">WhatsApp opens with the message ready; check it before sending. PDF makes a quotation on your letterhead to send as a file${G.on() ? "; Save PDF to Drive also adds a view link to the message" : ""}.</p></div>
+    ${q.id ? `<div class="btnbar">${q.won && Store.data.orders[q.won] ? `<a class="btn" href="#order-${q.won}">${svg("bag")} View order</a>` : `<button class="btn pri" data-act="quotewon">${svg("check")} Won: create order</button>`}</div>` : ""}
     ${q.id ? `<div class="btnbar"><button class="btn sm ghost" data-act="dupquote">Duplicate as new</button><button class="btn sm ghost danger" data-act="delquote" data-id="${q.id}">${ui.del==="q-"+q.id?"Tap again to delete":"Delete quote"}</button></div>` : ""}`;
 }
 const qtxt = (f, label, val, extra="") => `<div class="field"><label for="q-${f}">${label}</label><input class="inp" id="q-${f}" data-in="q" data-f="${f}" value="${esc(val??"")}" ${extra}></div>`;
@@ -828,6 +852,7 @@ function quoteText(q){
   const s = Store.data.settings || {}, t = quoteTotals(q);
   let x = `*QUOTATION ${q.no}*\n${s.firm || "Maya Traders"}${s.address?"\n"+s.address:""}${s.gstin?"\nGSTIN: "+s.gstin:""}\nDate: ${niceDate(q.date)} ${q.date ? q.date.slice(0,4) : ""}\n\nTo: ${q.client || "—"}${q.contact && q.contact!==q.client ? " (Attn: "+q.contact+")" : ""}\n\n`;
   q.lines.forEach((l,i) => { const a = (num(l.qty)||0)*(num(l.rate)||0); x += `${i+1}. ${l.desc}\n   ${fmt(num(l.qty)||0,2)} × ${inr(num(l.rate))} = ${inr(a)} + GST ${num(l.gst)??0}%\n`; });
+  if (q.pdfLink) x += `\nPDF: ${q.pdfLink}\n`;
   x += `\nSubtotal: ${inr(t.sub)}\n` + (q.place==="inter" ? `IGST: ${inr(t.gst)}\n` : `CGST: ${inr(t.gst/2)}\nSGST: ${inr(t.gst/2)}\n`) + `*Total: ${inr(t.grand)}*\n\n${q.terms||""}\n\n${s.name ? s.name+"\n" : ""}${s.phone ? s.phone+"\n" : ""}${s.email||""}`;
   return x.trim();
 }
@@ -870,36 +895,533 @@ function surveyText(s){
   return x;
 }
 
-/* ---------- NOTES ---------- */
-function vNotes(){
-  setHeader("Your space", "Notes");
-  const st = Store.data.settings || {};
-  const items = (Store.data.notes.items || []).slice().sort((a,b)=>(b.at||"").localeCompare(a.at||""));
-  let html = ``;
-  const lb = st.lastBackup; const stale = !lb || (Date.now() - new Date(lb).getTime()) > 14*864e5;
-  if (stale) html += `<div class="banner"><b>${lb ? "Last backup " + niceDate(lb.slice(0,10)) + "." : "No backup yet."}</b> Everything is saved on this phone. Make a backup and keep it in Google Drive, so a lost phone or reinstall loses nothing.</div>`;
-  html += `<div class="block"><textarea class="inp" id="newnote" placeholder="Quick note: a supplier price, a contact, something to learn…"></textarea><div class="btnbar"><button class="btn pri" data-act="addnote">${svg("plus")} Add note</button></div></div>`;
-  html += items.length ? `<div class="stack" style="margin-top:12px">${items.map(n => `<div class="block"><div class="row" style="justify-content:space-between"><span class="small muted mono">${niceDate((n.at||"").slice(0,10))}</span><div class="row" style="gap:6px"><button class="icon-btn" data-act="copy" data-text="${esc(n.text)}" aria-label="Copy">${svg("copy")}</button><button class="icon-btn" data-act="delnote" data-id="${n.id}" aria-label="Delete">${ui.del==="n-"+n.id?svg("check"):svg("trash")}</button></div></div><p style="white-space:pre-wrap;margin-top:6px">${esc(n.text)}</p></div>`).join("")}</div>`
-    : `<div class="empty" style="margin-top:12px"><b>No notes yet</b>Jot down prices, contacts and things you learn at meetings.</div>`;
-  html += `<div class="sec-h"><h3>My details on quotes</h3></div><form class="block stack" id="setform" onsubmit="return false"><div class="grid2">
-    ${stx("firm","Firm name",st.firm||"Maya Traders")}${stx("name","Your name",st.name)}${stx("phone","Phone",st.phone)}${stx("email","Email",st.email)}${stx("gstin","GSTIN",st.gstin)}${stx("address","Address",st.address)}</div>
-    <button class="btn" data-act="savesettings">${svg("check")} Save details</button></form>
-    <div class="btnbar"><a class="btn" href="#pricebook">${svg("pct")} My price book</a></div>
-    <div class="sec-h"><h3>Backup &amp; app</h3></div>
-    <div class="block stack"><p class="small">Your leads, quotes, surveys, prices, notes and photos are saved on this phone. ${lb ? "Last backup: " + niceDate(lb.slice(0,10)) + "." : ""}</p>
-      <div class="btnbar" style="margin-top:0"><button class="btn pri" data-act="backup">${svg("copy")} Make backup</button>
-      <label class="btn" for="restorefile">Restore from backup<input type="file" id="restorefile" accept="application/json,.json" data-in="restore" hidden></label></div>
-      ${ui.restoreFile ? `<div class="banner"><b>Replace the data on this phone</b> with the backup "${esc(ui.restoreFile.name)}"? Anything added since that backup will be lost.<div class="btnbar"><button class="btn pri sm" data-act="restoreok">Yes, restore</button><button class="btn sm" data-act="restorecancel">Cancel</button></div></div>` : ""}
-      ${ui.installEvt ? `<button class="btn" data-act="install">${svg("plus")} Install as app</button>` : ""}
-      <div class="row small muted" style="justify-content:space-between"><span>Version <span class="mono">${esc(BUILD.slice(0,7))}</span></span><button class="btn sm ghost" data-act="checkupdate">Check for updates</button></div></div>`;
+const stx = (n, l, v) => `<div class="field"><label for="st-${n}">${l}</label><input class="inp" id="st-${n}" name="${n}" value="${esc(v??"")}"></div>`;
+
+/* ===================== BUSINESS + GOOGLE (extension) ===================== */
+const CFG = window.MT_CONFIG || {};
+const TZ = "Asia/Kolkata";
+for (const k of ["orders","partners","expenses","activities"]) if (!Store.data[k]) Store.data[k] = {};
+const S = () => Store.data.settings || (Store.data.settings = {});
+const targets = () => Object.assign({meet:5, prop:2, order:1}, S().targets || {});
+const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return localISO(d); };
+const longDate = d => new Date(d + "T00:00:00").toLocaleDateString("en-IN", {weekday:"long", day:"numeric", month:"long"});
+const fmtD = d => d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", {day:"numeric", month:"short", year:"numeric"}) : "";
+function loadScript(src){ return new Promise((res, rej) => { if ($$(`script[src="${src}"]`).length && loadScript.done[src]) return res(); const s = document.createElement("script"); s.src = src; s.onload = () => { loadScript.done[src] = 1; res(); }; s.onerror = rej; document.head.appendChild(s); }); }
+loadScript.done = {};
+
+/* ---------- activity ---------- */
+const ACT = [["meeting","Meeting"],["visit","Site visit"],["call","Call"],["proposal","Proposal sent"],["order","Order won"]];
+const actName = t => (ACT.find(a => a[0] === t) || [t, t])[1];
+function logActivity(type, lead, note, date){
+  const id = uid();
+  Store.data.activities[id] = {id, type, lead: lead || "", note: note || "", date: date || today(), at: new Date().toISOString()};
+  Store.saveLocal(); G.soon();
+  return id;
+}
+function weekRange(){ const d = new Date(today() + "T00:00:00"); const w = (d.getDay() + 6) % 7; const s = addDays(today(), -w); return [s, addDays(s, 6)]; }
+function weekStats(){
+  const [s, e] = weekRange(); const c = {meet:0, prop:0, order:0, call:0};
+  for (const a of Object.values(Store.data.activities)) { if (a.date < s || a.date > e) continue;
+    if (a.type === "meeting" || a.type === "visit") c.meet++; else if (a.type === "proposal") c.prop++; else if (a.type === "order") c.order++; else if (a.type === "call") c.call++; }
+  return c;
+}
+function bar(label, n, t){ const pct = Math.min(100, t ? n / t * 100 : 0); return `<div><div class="row" style="justify-content:space-between"><span class="small" style="font-weight:600">${label}</span><span class="mono small">${n} / ${t}</span></div><div class="progress" style="margin-top:5px"><i style="width:${pct}%;${n >= t ? "" : "background:var(--copper)"}"></i></div></div>`; }
+function vActivity(){
+  setHeader("Today", "Activity log", "#today");
+  const w = weekStats(), t = targets(), [s, e] = weekRange();
+  const list = Object.values(Store.data.activities).sort((a, b) => (b.date + b.at).localeCompare(a.date + a.at)).slice(0, 60);
+  const leads = Object.values(Store.data.leads);
+  let html = `<div class="block stack"><div class="row" style="justify-content:space-between"><h3 style="margin:0">This week</h3><span class="small muted">${niceDate(s)} – ${niceDate(e)}</span></div>
+    ${bar("Meetings & site visits", w.meet, t.meet)}${bar("Proposals sent", w.prop, t.prop)}${bar("Orders won", w.order, t.order)}
+    <p class="small muted">Your plan: if meetings are high but orders are low, fix the offer or price; if meetings are low, fix the lead sources. Change targets in Settings.</p></div>
+  <form class="block stack" id="actform" onsubmit="return false" style="margin-top:12px"><h3 style="margin:0">Log activity</h3>
+    <div class="chips" style="flex-wrap:wrap;overflow:visible;padding:0">${ACT.map(([k, l], i) => `<label class="chip ${i === 0 ? "on" : ""}" style="cursor:pointer"><input type="radio" name="type" value="${k}" ${i === 0 ? "checked" : ""} hidden data-in="actradio">${l}</label>`).join("")}</div>
+    <div class="grid2"><div class="field"><label for="a-date">Date</label><input class="inp" type="date" id="a-date" name="date" value="${today()}"></div>
+    <div class="field"><label for="a-lead">Lead</label><select class="inp" id="a-lead" name="lead"><option value="">None</option>${leads.map(l => `<option value="${l.id}" ${ui.actLead === l.id ? "selected" : ""}>${esc(l.name)}${l.company ? " · " + esc(l.company) : ""}</option>`).join("")}</select></div></div>
+    <div class="field"><label for="a-note">Note</label><input class="inp" id="a-note" name="note" placeholder="What happened, next step"></div>
+    <button class="btn pri" data-act="logact">${svg("check")} Log it</button></form>
+  <div class="sec-h"><h3>Recent</h3></div>`;
+  html += list.length ? `<div class="list">${list.map(a => { const l = Store.data.leads[a.lead]; return `<div class="li"><span class="pill ${a.type === "order" ? "good" : a.type === "proposal" ? "warn" : ""}">${esc(actName(a.type))}</span><span class="grow"><b>${l ? esc(l.name) + (l.company ? " · " + esc(l.company) : "") : esc(a.note || actName(a.type))}</b><span>${niceDate(a.date)}${l && a.note ? " · " + esc(a.note) : ""}</span></span><button class="icon-btn" data-act="delact" data-id="${a.id}" aria-label="Delete">${ui.del === "a-" + a.id ? svg("check") : svg("x")}</button></div>`; }).join("")}</div>`
+    : `<div class="empty"><b>Nothing logged yet</b>Log every meeting, call and site visit. Quotes and orders are logged for you.</div>`;
+  ui.actLead = null;
   return html;
 }
-const stx = (n, l, v) => `<div class="field"><label for="st-${n}">${l}</label><input class="inp" id="st-${n}" name="${n}" value="${esc(v??"")}"></div>`;
+
+/* ---------- partners ---------- */
+const PTYPES = ["Electrician","Interior designer","Tile dealer","Contractor","Builder","Real-estate agent","Other"];
+function partnerOwed(pid){ return Object.values(Store.data.orders).filter(o => o.partner === pid && !o.feePaid).reduce((a, o) => a + (num(o.fee) || 0), 0); }
+function vPartners(){
+  setHeader("Sell", "Referral partners", "#sell");
+  const ps = Object.values(Store.data.partners).sort((a, b) => partnerOwed(b.id) - partnerOwed(a.id) || a.name.localeCompare(b.name));
+  const owed = ps.reduce((a, p) => a + partnerOwed(p.id), 0);
+  let html = `<div class="stat" style="grid-template-columns:1fr 1fr"><div><b>${ps.length}</b><span>Partners</span></div><div><b>${inrS(owed)}</b><span>Fees owed</span></div></div>
+    <div class="btnbar"><a class="btn pri" href="#partner-new">${svg("plus")} Add partner</a></div>
+    <p class="small muted" style="margin:10px 0">Electricians, designers, tile dealers and agents who send you work. Agree the fee in writing up front.</p>`;
+  html += ps.length ? `<div class="list">${ps.map(p => { const o = partnerOwed(p.id); const n = Object.values(Store.data.leads).filter(l => l.partner === p.id).length;
+    return `<a class="li" href="#partner-${p.id}"><span class="ico" style="width:38px;height:38px">${svg("users")}</span><span class="grow"><b>${esc(p.name)}</b><span>${esc(p.type || "")}${p.area ? " · " + esc(p.area) : ""} · ${n} lead${n === 1 ? "" : "s"}${p.pct ? " · " + p.pct + "% fee" : ""}</span></span>${o ? `<span class="pill warn">${inrS(o)} due</span>` : svg("chev")}</a>`; }).join("")}</div>`
+    : `<div class="empty"><b>No partners yet</b>Recruit 10-15 local electricians as Maya partners. Each one is on more sites than you can visit.</div>`;
+  return html;
+}
+function vPartner(id){
+  const p = id === "new" ? {id:"", type:"Electrician", pct:2} : Store.data.partners[id];
+  if (!p) return `<div class="empty"><b>Partner not found</b></div>`;
+  setHeader("Referral partner", p.name || "New partner", "#partners");
+  const leads = Object.values(Store.data.leads).filter(l => p.id && l.partner === p.id);
+  const orders = Object.values(Store.data.orders).filter(o => p.id && o.partner === p.id);
+  return `<form class="block stack" id="partform" data-id="${esc(p.id)}" onsubmit="return false"><div class="grid2">
+    ${txt("name", "Name", p.name)}${F.sel("type", "Type", PTYPES, p.type)}${txt("phone", "Phone", p.phone, 'inputmode="tel"')}${txt("area", "Area", p.area)}
+    ${txt("pct", "Fee (% of order value before GST)", p.pct, 'inputmode="decimal"')}${txt("fixed", "Or fixed fee per order ₹", p.fixed, 'inputmode="decimal"')}</div>
+    <div class="field"><label for="f-notes">Notes</label><textarea class="inp" id="f-notes" name="notes" placeholder="Agreement, how they like to be paid…">${esc(p.notes || "")}</textarea></div></form>
+  <div class="btnbar"><button class="btn pri" data-act="savepartner">${svg("check")} Save partner</button>
+    ${p.phone ? `<a class="btn" href="${waLink(p.phone, "Hello " + (p.name || "") + ", this is from Maya Traders.")}" target="_blank" rel="noopener">${svg("wa")} WhatsApp</a><a class="btn" href="tel:${esc(String(p.phone).replace(/[^\d+]/g, ""))}">Call</a>` : ""}
+    ${p.id ? `<button class="btn ghost danger" data-act="delpartner" data-id="${p.id}">${ui.del === "p-" + p.id ? "Tap again to delete" : "Delete"}</button>` : ""}</div>
+  ${p.id ? `<div class="sec-h"><h3>Fees</h3><span class="pill warn">${inrS(partnerOwed(p.id))} owed</span></div>
+    ${orders.length ? `<div class="list">${orders.map(o => `<div class="li"><span class="grow"><b>${esc(o.no)} · ${esc(o.client || "")}</b><span>${fmtD(o.date)} · fee ${inr(o.fee)}</span></span><button class="btn sm ${o.feePaid ? "" : "pri"}" data-act="feepaid" data-id="${o.id}">${o.feePaid ? "Paid ✓" : "Mark paid"}</button></div>`).join("")}</div>` : `<div class="empty">No orders from this partner yet.</div>`}
+    <div class="sec-h"><h3>Leads from ${esc(p.name)}</h3></div>${leads.length ? `<div class="list">${leads.map(leadLi).join("")}</div>` : `<div class="empty">Pick this partner in a lead's "Referred by" field.</div>`}` : ""}`;
+}
+
+/* ---------- orders ---------- */
+const OSTAT = ["Confirmed","Ordered from supplier","Dispatched","Delivered","Installed","Closed"];
+function orderTotals(o){
+  const paid = (o.payments || []).reduce((a, p) => a + (num(p.amount) || 0), 0);
+  const value = num(o.value) || 0, base = num(o.base) != null ? num(o.base) : value / 1.18;
+  return {paid, bal: Math.max(0, value - paid), profit: base - (num(o.cost) || 0) - (num(o.fee) || 0), base, value};
+}
+function newOrder(q){
+  const n = Object.keys(Store.data.orders).length + 1;
+  const o = {id:"", no:`MO/${fy()}/${String(n).padStart(3, "0")}`, date: today(), client:"", phone:"", lead:"", quote:"", items:"", value:null, base:null, cost:null, partner:"", fee:null, feePaid:false, status:"Confirmed", due:"", payments:[], notes:""};
+  if (q){ const t = quoteTotals(q), l = Store.data.leads[q.lead], p = l && l.partner ? Store.data.partners[l.partner] : null;
+    Object.assign(o, {client:q.client, phone:q.phone, lead:q.lead || "", quote:q.id, items:q.lines.map(x => `${x.desc} × ${fmt(num(x.qty) || 0, 2)}`).join("\n"), value:Math.round(t.grand), base:Math.round(t.sub),
+      partner: p ? p.id : "", fee: p ? Math.round(p.fixed ? num(p.fixed) : t.sub * (num(p.pct) || 0) / 100) : null}); }
+  return o;
+}
+function vOrders(){
+  setHeader("Sell", "Orders & payments", "#sell");
+  const os = Object.values(Store.data.orders).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const open = os.filter(o => o.status !== "Closed");
+  const due = os.reduce((a, o) => a + orderTotals(o).bal, 0);
+  const mon = today().slice(0, 7), monthVal = os.filter(o => (o.date || "").startsWith(mon)).reduce((a, o) => a + (num(o.value) || 0), 0);
+  let html = `<div class="stat"><div><b>${open.length}</b><span>Open orders</span></div><div><b>${inrS(due)}</b><span>To collect</span></div><div><b>${inrS(monthVal)}</b><span>Sales this month</span></div></div>
+    <div class="btnbar"><a class="btn pri" href="#order-new">${svg("plus")} New order</a><a class="btn" href="#quotes">From a quote</a></div>`;
+  html += os.length ? `<div class="list" style="margin-top:12px">${os.map(orderLi).join("")}</div>` : `<div class="empty" style="margin-top:12px"><b>No orders yet</b>Open a saved quote and tap "Won: create order", or add one here.</div>`;
+  return html;
+}
+function orderLi(o){
+  const t = orderTotals(o), late = o.due && o.due < today() && t.bal > 0;
+  return `<a class="li" href="#order-${o.id}">${svg("bag")}<span class="grow"><b>${esc(o.no)} · ${esc(o.client || "Client")}</b><span>${esc(o.status)} · ${inrS(t.value)}${t.bal ? " · " + inrS(t.bal) + " due" + (o.due ? " " + niceDate(o.due) : "") : " · paid"}</span></span><span class="pill ${t.bal === 0 ? "good" : late ? "bad" : "warn"}">${t.bal === 0 ? "Paid" : late ? "Overdue" : "Balance"}</span></a>`;
+}
+function vOrder(id){
+  if (id === "new"){ if (!ui.order || ui.order.id) ui.order = newOrder(); }
+  else { const o = Store.data.orders[id]; if (!o) return `<div class="empty"><b>Order not found</b></div>`; if (!ui.order || ui.order.id !== id) ui.order = JSON.parse(JSON.stringify(o)); }
+  const o = ui.order, t = orderTotals(o);
+  setHeader("Order", o.no, "#orders");
+  const leads = Object.values(Store.data.leads), parts = Object.values(Store.data.partners);
+  const oin = (f, l, v, ex="") => `<div class="field"><label for="o-${f}">${l}</label><input class="inp" id="o-${f}" data-in="ord" data-f="${f}" value="${esc(v ?? "")}" ${ex}></div>`;
+  return `<div class="stat"><div><b>${inrS(t.value)}</b><span>Order value</span></div><div><b style="color:${t.bal ? "var(--copper)" : "var(--earth)"}">${inrS(t.bal)}</b><span>Balance due</span></div><div><b>${inrS(t.profit)}</b><span>Gross profit</span></div></div>
+  <div class="block stack" style="margin-top:12px"><div class="grid2">${oin("client", "Client", o.client)}${oin("phone", "Phone", o.phone, 'inputmode="tel"')}
+    <div class="field"><label for="o-date">Order date</label><input class="inp" type="date" id="o-date" data-in="ord" data-f="date" value="${esc(o.date)}"></div>
+    <div class="field"><label for="o-status">Status</label><select class="inp" id="o-status" data-in="ord" data-f="status">${OSTAT.map(s => `<option ${s === o.status ? "selected" : ""}>${s}</option>`).join("")}</select></div>
+    ${oin("value", "Order value incl. GST ₹", o.value, 'inputmode="decimal"')}${oin("base", "Value before GST ₹", o.base, 'inputmode="decimal"')}
+    ${oin("cost", "My supplier cost ₹ (before GST)", o.cost, 'inputmode="decimal"')}
+    <div class="field"><label for="o-due">Collect balance by</label><input class="inp" type="date" id="o-due" data-in="ord" data-f="due" value="${esc(o.due || "")}"></div></div>
+    <div class="grid2"><div class="field"><label for="o-lead">Lead</label><select class="inp" id="o-lead" data-in="ord" data-f="lead"><option value="">None</option>${leads.map(l => `<option value="${l.id}" ${o.lead === l.id ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></div>
+    <div class="field"><label for="o-partner">Referral partner</label><select class="inp" id="o-partner" data-in="ord" data-f="partner"><option value="">None</option>${parts.map(p => `<option value="${p.id}" ${o.partner === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+    ${oin("fee", "Partner fee ₹", o.fee, 'inputmode="decimal"')}<label class="row small" style="gap:8px;font-weight:600;align-self:end;padding-bottom:10px"><input type="checkbox" data-in="ord" data-f="feePaid" ${o.feePaid ? "checked" : ""} style="width:18px;height:18px;accent-color:var(--copper)"> Fee paid</label></div>
+    <div class="field"><label for="o-items">Items</label><textarea class="inp" id="o-items" data-in="ord" data-f="items" rows="3">${esc(o.items || "")}</textarea></div>
+    <div class="field"><label for="o-notes">Notes (delivery, installer, warranty)</label><textarea class="inp" id="o-notes" data-in="ord" data-f="notes" rows="2">${esc(o.notes || "")}</textarea></div></div>
+  <div class="block" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Payments received</h3><span class="mono small">${inr(t.paid)}</span></div>
+    ${(o.payments || []).map((p, i) => `<div class="li" style="padding-inline:0"><span class="grow"><b class="mono">${inr(p.amount)}</b><span>${fmtD(p.date)} · ${esc(p.mode || "")}${p.note ? " · " + esc(p.note) : ""}</span></span><button class="icon-btn" data-act="delpay" data-i="${i}" aria-label="Remove">${svg("x")}</button></div>`).join("") || `<p class="small muted" style="margin-top:6px">No payments yet.</p>`}
+    <div class="grid3" style="margin-top:10px"><div class="field"><label for="pay-amt">Amount ₹</label><input class="inp mono" id="pay-amt" inputmode="decimal" value="${t.bal ? Math.round(t.bal) : ""}"></div>
+    <div class="field"><label for="pay-date">Date</label><input class="inp" type="date" id="pay-date" value="${today()}"></div>
+    <div class="field"><label for="pay-mode">Mode</label><select class="inp" id="pay-mode">${["UPI","Bank transfer","Cheque","Cash"].map(m => `<option>${m}</option>`).join("")}</select></div></div>
+    <div class="btnbar"><button class="btn" data-act="addpay">${svg("plus")} Add payment</button></div></div>
+  <div class="btnbar"><button class="btn pri" data-act="saveorder">${svg("check")} Save order</button>
+    ${o.phone && t.bal ? `<a class="btn" href="${waLink(o.phone, `Hello, gentle reminder from ${S().firm || "Maya Traders"} for order ${o.no}: balance of ${inr(t.bal)} is due${o.due ? " by " + fmtD(o.due) : ""}. Thank you.`)}" target="_blank" rel="noopener">${svg("wa")} Payment reminder</a>` : ""}
+    ${o.quote && Store.data.quotes[o.quote] ? `<a class="btn" href="#quote-${o.quote}">${svg("quote")} Quote</a>` : ""}
+    ${o.id ? `<button class="btn ghost danger" data-act="delorder" data-id="${o.id}">${ui.del === "o-" + o.id ? "Tap again to delete" : "Delete"}</button>` : ""}</div>
+  ${G.on() ? `<p class="small muted" style="margin-top:8px">A "Collect balance" reminder goes to your Google Calendar on the due date.</p>` : ""}`;
+}
+
+/* ---------- expenses ---------- */
+const ECAT = ["Travel / fuel","Food","Samples & demo","Marketing / IndiaMART","Phone & internet","Tools & meters","Other"];
+function vExpenses(){
+  setHeader("Today", "Expenses", "#today");
+  const all = Object.values(Store.data.expenses).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const mon = ui.expMonth || today().slice(0, 7);
+  const list = all.filter(x => (x.date || "").startsWith(mon));
+  const total = list.reduce((a, x) => a + (num(x.amount) || 0), 0);
+  const byCat = {}; list.forEach(x => byCat[x.cat] = (byCat[x.cat] || 0) + (num(x.amount) || 0));
+  const months = [...new Set(all.map(x => (x.date || "").slice(0, 7)).concat([today().slice(0, 7)]))].sort().reverse();
+  const mname = m => new Date(m + "-01T00:00:00").toLocaleDateString("en-IN", {month:"long", year:"numeric"});
+  return `<form class="block stack" id="expform" onsubmit="return false"><h3 style="margin:0">Add expense</h3><div class="grid2">
+    <div class="field"><label for="e-amt">Amount ₹</label><input class="inp mono" id="e-amt" name="amount" inputmode="decimal" placeholder="0"></div>
+    <div class="field"><label for="e-date">Date</label><input class="inp" type="date" id="e-date" name="date" value="${today()}"></div></div>
+    ${F.sel("cat", "Category", ECAT, "Travel / fuel")}<div class="field"><label for="e-note">Note</label><input class="inp" id="e-note" name="note" placeholder="e.g. Manesar plant visit"></div>
+    <button class="btn pri" data-act="addexp">${svg("plus")} Add</button></form>
+  <div class="chips" style="margin-top:6px">${months.map(m => `<button class="chip ${m === mon ? "on" : ""}" data-act="expmonth" data-v="${m}">${mname(m)}</button>`).join("")}</div>
+  <div class="block" style="margin-top:8px"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${mname(mon)}</h3><b class="mono">${inr(total)}</b></div>
+    ${Object.keys(byCat).length ? `<div class="stack" style="margin-top:10px">${Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div><div class="row" style="justify-content:space-between"><span class="small">${esc(c)}</span><span class="mono small">${inr(v)}</span></div><div class="progress" style="margin-top:4px"><i style="width:${v / total * 100}%;background:var(--copper)"></i></div></div>`).join("")}</div>` : `<p class="small muted" style="margin-top:6px">No expenses this month.</p>`}</div>
+  ${list.length ? `<div class="list" style="margin-top:12px">${list.map(x => `<div class="li"><span class="grow"><b class="mono">${inr(x.amount)}</b><span>${fmtD(x.date)} · ${esc(x.cat)}${x.note ? " · " + esc(x.note) : ""}</span></span><button class="icon-btn" data-act="delexp" data-id="${x.id}" aria-label="Delete">${ui.del === "e-" + x.id ? svg("check") : svg("x")}</button></div>`).join("")}</div>` : ""}`;
+}
+
+/* ---------- today ---------- */
+function vToday(){
+  setHeader(longDate(today()), "Today");
+  const leads = Object.values(Store.data.leads);
+  const due = leads.filter(l => l.next && l.next <= today() && !["Won","Lost"].includes(l.stage)).sort((a, b) => a.next.localeCompare(b.next));
+  const visits = leads.filter(l => l.visit && l.visit >= today() && l.visit <= addDays(today(), 2)).sort((a, b) => (a.visit + (a.visitTime || "")).localeCompare(b.visit + (b.visitTime || "")));
+  const pay = Object.values(Store.data.orders).filter(o => orderTotals(o).bal > 0 && o.due && o.due <= addDays(today(), 3)).sort((a, b) => a.due.localeCompare(b.due));
+  const w = weekStats(), t = targets();
+  const pend = G.pendingCount();
+  let html = "";
+  if (G.ready() && !G.on()) html += `<div class="banner"><b>Connect Google</b> to put follow-ups in your Calendar and back up to Drive automatically. <button class="btn sm" data-act="gconnect" style="margin-top:8px">Connect Google</button></div>`;
+  else if (G.on() && pend) html += `<div class="banner"><b>${pend} change${pend > 1 ? "s" : ""} waiting for Google.</b> <button class="btn sm" data-act="gsync" style="margin-left:6px">Sync now</button></div>`;
+  html += `<div class="tgrid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+    ${[["#activity","check","Log activity"],["#lead-new","users","New lead"],["#quote","quote","New quote"],["#survey","clip","Site survey"],["#expenses","pct","Expense"],["#notes","note","Notes"]].map(([h, i, l]) => `<a class="tcard" href="${h}" data-act="${h === "#quote" ? "newquote" : h === "#survey" ? "newsurvey" : ""}" style="min-height:84px;align-items:flex-start"><span class="ico">${svg(i)}</span><b style="font-size:13.5px">${l}</b></a>`).join("")}</div>`;
+  html += `<div class="sec-h"><h3>Calendar today</h3>${G.on() ? `<a class="small" href="https://calendar.google.com/calendar/u/0/r/day" target="_blank" rel="noopener">Open Calendar</a>` : ""}</div><div id="gtoday">${G.on() ? `<div class="empty" style="padding:14px">Loading your calendar…</div>` : `<div class="empty" style="padding:14px">${G.ready() ? "Connect Google to see today's meetings here." : "Set up Google in Settings to see today's meetings here."}</div>`}</div>`;
+  if (visits.length) html += `<div class="sec-h"><h3>Site visits (next 3 days)</h3></div><div class="list">${visits.map(l => `<a class="li" href="#lead-${l.id}">${svg("clip")}<span class="grow"><b>${esc(l.name)}${l.company ? " · " + esc(l.company) : ""}</b><span>${niceDate(l.visit)}${l.visitTime ? " " + l.visitTime : ""}${l.area ? " · " + esc(l.area) : ""}</span></span>${svg("chev")}</a>`).join("")}</div>`;
+  html += `<div class="sec-h"><h3>Follow up</h3><a class="small" href="#leads">All leads</a></div>` + (due.length ? `<div class="list">${due.map(leadLi).join("")}</div>` : `<div class="empty" style="padding:14px">No follow-ups due. Set a follow-up date on each lead.</div>`);
+  if (pay.length) html += `<div class="sec-h"><h3>Collect payments</h3><a class="small" href="#orders">Orders</a></div><div class="list">${pay.map(orderLi).join("")}</div>`;
+  html += `<div class="sec-h"><h3>This week</h3><a class="small" href="#activity">Log</a></div><div class="block stack">${bar("Meetings & site visits", w.meet, t.meet)}${bar("Proposals sent", w.prop, t.prop)}${bar("Orders won", w.order, t.order)}</div>`;
+  html += `<div class="sec-h"><h3>More</h3></div><div class="list">${[["#orders","bag","Orders & payments"],["#partners","users","Referral partners"],["#expenses","pct","Expenses"],["#activity","check","Activity log"],["#notes","note","Notes"],["#settings","swap","Settings, Google & backup"]].map(([h, i, l]) => `<a class="li" href="${h}">${svg(i)}<span class="grow"><b>${l}</b></span>${svg("chev")}</a>`).join("")}</div>`;
+  return html;
+}
+async function loadTodayEvents(){
+  const el = $("#gtoday"); if (!el || !G.on()) return;
+  try {
+    const ev = await G.todayEvents();
+    if (!$("#gtoday")) return;
+    $("#gtoday").innerHTML = ev.length ? `<div class="list">${ev.map(e => { const tm = e.start.dateTime ? new Date(e.start.dateTime).toLocaleTimeString("en-IN", {hour:"numeric", minute:"2-digit"}) : "All day";
+      return `<a class="li" href="${esc(e.htmlLink || "#today")}" target="_blank" rel="noopener"><span class="mono small" style="width:64px;flex:none">${tm}</span><span class="grow"><b>${esc(e.summary || "(no title)")}</b>${e.location ? `<span>${esc(e.location)}</span>` : ""}</span></a>`; }).join("")}</div>`
+      : `<div class="empty" style="padding:14px">Nothing on your calendar today.</div>`;
+  } catch(e){ if ($("#gtoday")) $("#gtoday").innerHTML = `<div class="empty" style="padding:14px">Couldn't reach Google Calendar. <button class="btn sm" data-act="gsync">Reconnect</button></div>`; }
+}
+
+/* ---------- notes & settings ---------- */
+function vNotes(){
+  setHeader("Today", "Notes", "#today");
+  const items = (Store.data.notes.items || []).slice().sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+  let html = `<div class="block"><textarea class="inp" id="newnote" placeholder="Quick note: a supplier price, a contact, something to learn…"></textarea><div class="btnbar"><button class="btn pri" data-act="addnote">${svg("plus")} Add note</button></div></div>`;
+  html += items.length ? `<div class="stack" style="margin-top:12px">${items.map(n => `<div class="block"><div class="row" style="justify-content:space-between"><span class="small muted mono">${niceDate((n.at || "").slice(0, 10))}</span><div class="row" style="gap:6px"><button class="icon-btn" data-act="copy" data-text="${esc(n.text)}" aria-label="Copy">${svg("copy")}</button><button class="icon-btn" data-act="delnote" data-id="${n.id}" aria-label="Delete">${ui.del === "n-" + n.id ? svg("check") : svg("trash")}</button></div></div><p style="white-space:pre-wrap;margin-top:6px">${esc(n.text)}</p></div>`).join("")}</div>`
+    : `<div class="empty" style="margin-top:12px"><b>No notes yet</b>Jot down prices, contacts and things you learn at meetings.</div>`;
+  return html;
+}
+function vSettings(){
+  setHeader("Today", "Settings", "#today");
+  const st = S(), t = targets(), g = st.google || {}, lb = st.lastBackup;
+  const stale = !lb || (Date.now() - new Date(lb).getTime()) > 14 * 864e5;
+  return `<div class="sec-h" style="margin-top:4px"><h3>Google Calendar & Drive</h3>${G.on() ? `<span class="pill good">Connected</span>` : ""}</div>
+  <div class="block stack">
+    ${!G.ready() ? `<p class="small">Google isn't set up yet. Follow "Connect Google" in the setup guide, then paste the Web client ID here.</p>` :
+      G.on() ? `<p class="small">Signed in as <b>${esc(g.email || "your Google account")}</b>. Follow-ups, site visits and payment due dates go to your Google Calendar. Data backs up to Drive › Maya Traders › Backups${g.lastDrive ? ` (last: ${new Date(g.lastDrive).toLocaleString("en-IN", {day:"numeric", month:"short", hour:"numeric", minute:"2-digit"})})` : ""}. Quote PDFs go to Drive › Maya Traders › Quotes.</p>
+      <div class="btnbar" style="margin-top:0"><button class="btn pri" data-act="gsync">Sync now</button><button class="btn" data-act="gbackup">Back up to Drive</button><button class="btn" data-act="grestorelist">Restore from Drive</button><button class="btn ghost danger" data-act="gdisconnect">Disconnect</button></div>
+      <div id="gbackups"></div>`
+      : `<p class="small">Connect to put follow-ups, site visits and payment reminders in your Google Calendar, see today's meetings on the Today screen, and back up to Google Drive automatically.</p><div class="btnbar" style="margin-top:0"><button class="btn pri" data-act="gconnect">Connect Google</button></div>`}
+    <details class="how"><summary>Advanced: Google client ID</summary><div class="field" style="margin-top:8px"><label for="g-cid">Web client ID</label><input class="inp mono" id="g-cid" value="${esc(st.gClientId || "")}" placeholder="${esc(CFG.googleWebClientId || "xxxx.apps.googleusercontent.com")}"></div><button class="btn sm" data-act="savecid" style="margin-top:8px">Save client ID</button></details>
+  </div>
+  <div class="sec-h"><h3>Weekly targets</h3></div>
+  <form class="block" id="tgtform" onsubmit="return false"><div class="grid3">${F.n("meet", "Meetings", t.meet)}${F.n("prop", "Proposals", t.prop)}${F.n("order", "Orders", t.order)}</div><button class="btn" data-act="savetargets" style="margin-top:10px">${svg("check")} Save targets</button></form>
+  <div class="sec-h"><h3>My details on quotes</h3></div><form class="block stack" id="setform" onsubmit="return false"><div class="grid2">
+    ${stx("firm", "Firm name", st.firm || "Maya Traders")}${stx("name", "Your name", st.name)}${stx("phone", "Phone", st.phone)}${stx("email", "Email", st.email)}${stx("gstin", "GSTIN", st.gstin)}${stx("address", "Address", st.address)}</div>
+    <button class="btn" data-act="savesettings">${svg("check")} Save details</button></form>
+  <div class="sec-h"><h3>Backup file</h3></div>
+  <div class="block stack">${stale && !G.on() ? `<div class="banner" style="margin:0"><b>${lb ? "Last backup " + niceDate(lb.slice(0, 10)) + "." : "No backup yet."}</b> Everything is saved on this phone. Keep a backup in Google Drive.</div>` : ""}
+    <p class="small">A backup file holds your leads, quotes, orders, partners, expenses, surveys, prices, notes and photos.</p>
+    <div class="btnbar" style="margin-top:0"><button class="btn" data-act="backup">${svg("copy")} Make backup file</button>
+    <label class="btn" for="restorefile">Restore from file<input type="file" id="restorefile" accept="application/json,.json" data-in="restore" hidden></label></div>
+    ${ui.restoreFile ? `<div class="banner"><b>Replace the data on this phone</b> with "${esc(ui.restoreFile.name || "the Drive backup")}"? Anything added since that backup will be lost.<div class="btnbar"><button class="btn pri sm" data-act="restoreok">Yes, restore</button><button class="btn sm" data-act="restorecancel">Cancel</button></div></div>` : ""}</div>
+  <div class="sec-h"><h3>App</h3></div>
+  <div class="block stack">${ui.installEvt ? `<button class="btn" data-act="install">${svg("plus")} Install as app</button>` : ""}
+    <div class="row small muted" style="justify-content:space-between"><span>Maya Traders · version <span class="mono">${esc(BUILD.slice(0, 7))}</span></span><button class="btn sm ghost" data-act="checkupdate">Check for updates</button></div></div>`;
+}
+
+/* ---------- Google ---------- */
+const SCOPES = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/drive.file", "email", "profile"];
+const CAL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+const DRV = "https://www.googleapis.com/drive/v3/files";
+const UPL = "https://www.googleapis.com/upload/drive/v3/files";
+const G = {
+  tok: null, exp: 0, inited: false, timer: null, bTimer: null, running: false,
+  clientId(){ return (S().gClientId || "").trim() || CFG.googleWebClientId || ""; },
+  ready(){ return !!this.clientId(); },
+  on(){ return !!(S().google && S().google.on); },
+  native(){ return isNative() && window.Capacitor.Plugins && window.Capacitor.Plugins.GoogleAuth ? window.Capacitor.Plugins.GoogleAuth : null; },
+  keep(tok, secs){ this.tok = tok; this.exp = Date.now() + (secs || 3300) * 1000; try { sessionStorage.setItem("mt-gtok", JSON.stringify({tok, exp:this.exp})); } catch(e){} },
+  restore(){ try { const t = JSON.parse(sessionStorage.getItem("mt-gtok") || "null"); if (t && t.exp > Date.now()) { this.tok = t.tok; this.exp = t.exp; } } catch(e){} },
+  async token(interactive){
+    if (this.tok && Date.now() < this.exp - 60000) return this.tok;
+    if (!this.ready()) return null;
+    const GA = this.native();
+    if (GA){
+      try {
+        if (!this.inited){ await GA.initialize({clientId: this.clientId(), scopes: SCOPES, grantOfflineAccess: true}); this.inited = true; }
+        let a = null;
+        if (this.on()) { try { const r = await GA.refresh(); a = r && r.accessToken; } catch(e){ a = null; } }
+        if (!a && interactive){ const u = await GA.signIn(); a = u && u.authentication && u.authentication.accessToken; if (u && u.email) this.email = u.email; }
+        if (a){ this.keep(a); return a; }
+      } catch(e){ if (interactive) throw e; }
+      return null;
+    }
+    if (!interactive) return null;
+    await loadScript("https://accounts.google.com/gsi/client");
+    return new Promise((res, rej) => {
+      const tc = google.accounts.oauth2.initTokenClient({client_id: this.clientId(), scope: SCOPES.join(" "),
+        callback: r => { if (r.error) rej(r); else { this.keep(r.access_token, r.expires_in); res(r.access_token); } }, error_callback: e => rej(e)});
+      tc.requestAccessToken({prompt: this.on() ? "" : "consent", login_hint: (S().google || {}).email || undefined});
+    });
+  },
+  async api(url, opts = {}, interactive = false){
+    const t = await this.token(interactive); if (!t) throw {code:"auth"};
+    const r = await fetch(url, {...opts, headers: {...(opts.headers || {}), Authorization: "Bearer " + t}});
+    if (r.status === 401) { this.tok = null; try { sessionStorage.removeItem("mt-gtok"); } catch(e){} throw {code:"auth", status:401}; }
+    if (!r.ok) throw {code:"http", status: r.status};
+    if (r.status === 204) return null;
+    return opts.raw ? r : r.json();
+  },
+  async connect(){
+    if (!this.ready()){ toast("Add the Google client ID in Settings first"); location.hash = "#settings"; return; }
+    try {
+      await this.token(true);
+      let email = this.email || "";
+      try { const u = await this.api("https://www.googleapis.com/oauth2/v3/userinfo"); email = u.email || email; } catch(e){}
+      S().google = Object.assign({}, S().google, {on: true, email});
+      Object.values(Store.data.leads).forEach(l => { if (l.next || l.visit) l.gDirty = true; });
+      Object.values(Store.data.orders).forEach(o => { if (o.due) o.gDirty = true; });
+      Store.saveLocal(); toast("Google connected"); rerender();
+      this.flush(true);
+    } catch(e){ toast("Google sign-in didn't finish. Try again."); }
+  },
+  async disconnect(){
+    const GA = this.native();
+    try { if (GA) await GA.signOut(); else if (window.google && this.tok) google.accounts.oauth2.revoke(this.tok); } catch(e){}
+    this.tok = null; try { sessionStorage.removeItem("mt-gtok"); } catch(e){}
+    S().google = Object.assign({}, S().google, {on: false}); Store.saveLocal(); toast("Google disconnected"); rerender();
+  },
+  pendingCount(){
+    return Object.values(Store.data.leads).filter(l => l.gDirty).length + Object.values(Store.data.orders).filter(o => o.gDirty).length + (S().gDel || []).length + (S().gBackupDue ? 1 : 0);
+  },
+  soon(){ if (!this.on()) return; S().gBackupDue = true; clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(false), 2500); },
+  ev(kind, x){
+    const firm = S().firm || "Maya Traders";
+    let date, time, dur = 60, summary, desc = [];
+    if (kind === "follow"){ date = x.next; time = x.nextTime; dur = 30; summary = `Follow up: ${x.name}${x.company ? " (" + x.company + ")" : ""}`; }
+    else if (kind === "visit"){ date = x.visit; time = x.visitTime; dur = 90; summary = `Site visit: ${x.name}${x.area ? ", " + x.area : ""}`; }
+    else { const t = orderTotals(x); date = x.due; summary = `Collect payment: ${x.client || x.no} (${inr(t.bal)})`; desc.push(`Order ${x.no}, value ${inr(t.value)}, received ${inr(t.paid)}.`); }
+    if (kind !== "pay"){ if (x.phone) desc.push("Phone: " + x.phone); if (x.area) desc.push("Area: " + x.area); if (x.stage) desc.push("Stage: " + x.stage); if (x.products && x.products.length) desc.push("Interested in: " + x.products.map(p => byId[p] ? byId[p].name.split("(")[0].trim() : p).join(", ")); if (x.notes) desc.push("\n" + x.notes); }
+    desc.push("\n— " + firm + " app");
+    const b = {summary, description: desc.join("\n"), location: kind === "visit" ? (x.area || "") : undefined, colorId: kind === "pay" ? "6" : kind === "visit" ? "2" : "5"};
+    if (time){ const [h, m] = time.split(":").map(Number); const e = new Date(2000, 0, 1, h, m + dur); const pad = n => String(n).padStart(2, "0");
+      const endDate = e.getDate() > 1 ? addDays(date, 1) : date;
+      b.start = {dateTime: `${date}T${time}:00`, timeZone: TZ}; b.end = {dateTime: `${endDate}T${pad(e.getHours())}:${pad(e.getMinutes())}:00`, timeZone: TZ};
+      b.reminders = {useDefault: false, overrides: [{method: "popup", minutes: kind === "visit" ? 60 : 15}]}; }
+    else { b.start = {date}; b.end = {date: addDays(date, 1)}; b.reminders = {useDefault: false, overrides: [{method: "popup", minutes: 15 * 60}]}; }
+    return b;
+  },
+  async syncOne(x, kind, key, date){
+    const id = x[key];
+    if (!date){ if (id){ try { await this.api(CAL + "/" + encodeURIComponent(id), {method: "DELETE"}); } catch(e){ if (e.status !== 404 && e.status !== 410) throw e; } delete x[key]; } return; }
+    const body = JSON.stringify(this.ev(kind, x)), h = {"Content-Type": "application/json"};
+    if (id){ try { await this.api(CAL + "/" + encodeURIComponent(id), {method: "PATCH", headers: h, body}); return; } catch(e){ if (e.status !== 404 && e.status !== 410) throw e; } }
+    const r = await this.api(CAL, {method: "POST", headers: h, body}); x[key] = r.id;
+  },
+  async flush(interactive){
+    if (!this.on() || this.running) return;
+    this.running = true;
+    let errs = 0;
+    try {
+      if (!(await this.token(interactive))) { this.running = false; if (cur === "today") rerender(); return; }
+      for (const id of (S().gDel || []).slice()){ try { await this.api(CAL + "/" + encodeURIComponent(id), {method: "DELETE"}); } catch(e){ if (e.status !== 404 && e.status !== 410) { errs++; continue; } } S().gDel = S().gDel.filter(x => x !== id); }
+      for (const l of Object.values(Store.data.leads)){ if (!l.gDirty) continue; const closed = ["Won","Lost"].includes(l.stage);
+        try { await this.syncOne(l, "follow", "gFollow", closed ? "" : l.next); await this.syncOne(l, "visit", "gVisit", l.visit); delete l.gDirty; } catch(e){ errs++; } }
+      for (const o of Object.values(Store.data.orders)){ if (!o.gDirty) continue;
+        try { await this.syncOne(o, "pay", "gDue", orderTotals(o).bal > 0 ? o.due : ""); delete o.gDirty; } catch(e){ errs++; } }
+      Store.saveLocal();
+      const last = (S().google || {}).lastDrive;
+      if (S().gBackupDue || !last || Date.now() - new Date(last).getTime() > 12 * 36e5) { try { await this.backup(); } catch(e){ errs++; } }
+      if (interactive) toast(errs ? "Some items didn't sync. Try again later." : "Synced with Google");
+    } catch(e){ if (interactive) toast("Couldn't reach Google"); }
+    this.running = false;
+    if (cur === "today" || cur === "settings") rerender();
+  },
+  queueDelete(...ids){ const d = S().gDel || (S().gDel = []); ids.filter(Boolean).forEach(i => d.push(i)); },
+  async todayEvents(){
+    const s = new Date(today() + "T00:00:00"), e = new Date(addDays(today(), 1) + "T00:00:00");
+    const r = await this.api(`${CAL}?singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(s.toISOString())}&timeMax=${encodeURIComponent(e.toISOString())}&maxResults=20`);
+    return r.items || [];
+  },
+  async folder(name, parent){
+    const g = S().google; g.folders = g.folders || {};
+    const key = (parent || "root") + "/" + name;
+    if (g.folders[key]) return g.folders[key];
+    const q = `name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false` + (parent ? ` and '${parent}' in parents` : "");
+    const r = await this.api(`${DRV}?q=${encodeURIComponent(q)}&fields=files(id)`);
+    let id = r.files && r.files[0] && r.files[0].id;
+    if (!id){ const c = await this.api(DRV, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({name, mimeType: "application/vnd.google-apps.folder", parents: parent ? [parent] : undefined})}); id = c.id; }
+    g.folders[key] = id; Store.saveLocal(); return id;
+  },
+  async upload(name, blob, parent, fileId){
+    const b = "mtb" + uid(), meta = fileId ? {name} : {name, parents: [parent]};
+    const body = new Blob([`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: ${blob.type || "application/octet-stream"}\r\n\r\n`, blob, `\r\n--${b}--`]);
+    return this.api(`${UPL}${fileId ? "/" + fileId : ""}?uploadType=multipart&fields=id,webViewLink`, {method: fileId ? "PATCH" : "POST", headers: {"Content-Type": `multipart/related; boundary=${b}`}, body});
+  },
+  async backupFolder(){ const root = await this.folder("Maya Traders"); return this.folder("Backups", root); },
+  async backup(){
+    const g = S().google, json = await backupJSON(), blob = new Blob([json], {type: "application/json"});
+    let bf = await this.backupFolder(), r;
+    if (g.backupId){ try { r = await this.upload("maya-backup-latest.json", blob, bf, g.backupId); } catch(e){ if (e.status === 404) { g.backupId = null; g.folders = {}; bf = await this.backupFolder(); } else throw e; } }
+    if (!r) r = await this.upload("maya-backup-latest.json", blob, bf);
+    g.backupId = r.id;
+    const wk = weekRange()[0];
+    if (g.snapWeek !== wk){ await this.upload(`maya-backup-${today()}.json`, blob, bf); g.snapWeek = wk; }
+    g.lastDrive = new Date().toISOString(); S().gBackupDue = false; S().lastBackup = g.lastDrive; Store.saveLocal();
+  },
+  async listBackups(){ const bf = await this.backupFolder(); const r = await this.api(`${DRV}?q=${encodeURIComponent(`'${bf}' in parents and trashed=false`)}&orderBy=modifiedTime desc&fields=files(id,name,modifiedTime,size)&pageSize=20`); return r.files || []; },
+  async fetchBackup(id){ const r = await this.api(`${DRV}/${id}?alt=media`, {raw: true}); return r.json(); },
+  async savePdf(name, blob){ const root = await this.folder("Maya Traders"), qf = await this.folder("Quotes", root); return this.upload(name, blob, qf); },
+  async shareAnyone(id){ await this.api(`${DRV}/${id}/permissions`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({role: "reader", type: "anyone"})}); const r = await this.api(`${DRV}/${id}?fields=webViewLink`); return r.webViewLink; }
+};
+G.restore();
+function gcalLink(title, date, time, details){
+  const d = date.replace(/-/g, "");
+  let dates = `${d}/${addDays(date, 1).replace(/-/g, "")}`;
+  if (time){ const [h, m] = time.split(":"); const s = `${d}T${h}${m}00`; const e = new Date(2000, 0, 1, +h, +m + 30); dates = `${s}/${d}T${String(e.getHours()).padStart(2, "0")}${String(e.getMinutes()).padStart(2, "0")}00`; }
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${dates}&ctz=${TZ}&details=${encodeURIComponent(details || "")}`;
+}
+
+/* ---------- quote PDF ---------- */
+async function quotePdf(q){
+  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+  const {jsPDF} = window.jspdf; const doc = new jsPDF({unit: "mm", format: "a4"});
+  const st = S(), W = 210, M = 14, t = quoteTotals(q);
+  const rs = n => "Rs. " + (Math.round((n || 0) * 100) / 100).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const clean = s => String(s || "").replace(/₹/g, "Rs. ").replace(/[^\x00-\xFF]/g, "");
+  doc.setFillColor(21, 32, 28); doc.rect(0, 0, W, 32, "F");
+  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(19); doc.text(clean(st.firm || "Maya Traders"), M, 15);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(200, 212, 206);
+  doc.text(clean([st.address, st.gstin ? "GSTIN " + st.gstin : ""].filter(Boolean).join("   |   ")), M, 22);
+  doc.text(clean([st.name, st.phone, st.email].filter(Boolean).join("   |   ")), M, 27);
+  doc.setTextColor(225, 139, 86); doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.text("QUOTATION", W - M, 15, {align: "right"});
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(255, 255, 255); doc.text(clean(q.no), W - M, 22, {align: "right"}); doc.text("Date: " + fmtD(q.date), W - M, 27, {align: "right"});
+  let y = 42;
+  doc.setTextColor(90, 104, 98); doc.setFontSize(8); doc.text("QUOTATION FOR", M, y); y += 5.5;
+  doc.setTextColor(21, 32, 28); doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text(clean(q.client || "-"), M, y); y += 5;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+  const who = [q.contact && q.contact !== q.client ? "Attn: " + q.contact : "", q.phone].filter(Boolean).join("   |   "); if (who) { doc.text(clean(who), M, y); y += 5; }
+  y += 4;
+  const cols = {n: M + 2, d: M + 9, q: 127, r: 152, g: 166, a: W - M - 2};
+  const head = () => { doc.setFillColor(226, 231, 228); doc.rect(M, y - 5, W - 2 * M, 8, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(21, 32, 28);
+    doc.text("#", cols.n, y); doc.text("Description", cols.d, y); doc.text("Qty", cols.q, y, {align: "right"}); doc.text("Rate", cols.r, y, {align: "right"}); doc.text("GST", cols.g, y, {align: "right"}); doc.text("Amount", cols.a, y, {align: "right"}); y += 7; doc.setFont("helvetica", "normal"); };
+  head();
+  q.lines.forEach((l, i) => {
+    const lines = doc.splitTextToSize(clean(l.desc), 92), h = lines.length * 4.4 + 3;
+    if (y + h > 268){ doc.addPage(); y = 20; head(); }
+    const amt = (num(l.qty) || 0) * (num(l.rate) || 0);
+    doc.setFontSize(9); doc.text(String(i + 1), cols.n, y); doc.text(lines, cols.d, y);
+    doc.text(fmt(num(l.qty) || 0, 2), cols.q, y, {align: "right"}); doc.text(rs(num(l.rate)).replace("Rs. ", ""), cols.r, y, {align: "right"}); doc.text((num(l.gst) ?? 0) + "%", cols.g, y, {align: "right"}); doc.text(rs(amt).replace("Rs. ", ""), cols.a, y, {align: "right"});
+    y += h; doc.setDrawColor(210, 216, 212); doc.line(M, y - 3, W - M, y - 3);
+  });
+  if (y > 240){ doc.addPage(); y = 20; }
+  y += 3; const tx = W - M - 62;
+  const trow = (l, v, bold) => { doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(bold ? 11 : 9.5); doc.text(l, tx, y); doc.text(v, W - M - 2, y, {align: "right"}); y += bold ? 7 : 5.5; };
+  trow("Subtotal", rs(t.sub));
+  if (q.place === "inter") trow("IGST", rs(t.gst)); else { trow("CGST", rs(t.gst / 2)); trow("SGST", rs(t.gst / 2)); }
+  doc.setDrawColor(21, 32, 28); doc.line(tx, y - 3.5, W - M, y - 3.5); y += 1.5; trow("Total", rs(t.grand), true);
+  y += 4; doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text("Terms & conditions", M, y); y += 5; doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+  const terms = doc.splitTextToSize(clean(q.terms), W - 2 * M); if (y + terms.length * 4 > 270){ doc.addPage(); y = 20; } doc.text(terms, M, y); y += terms.length * 4 + 14;
+  if (y > 272){ doc.addPage(); y = 30; }
+  doc.setFont("helvetica", "bold"); doc.text("For " + clean(st.firm || "Maya Traders"), W - M, y, {align: "right"}); y += 12;
+  doc.setFont("helvetica", "normal"); doc.text(clean(st.name || "Authorised signatory"), W - M, y, {align: "right"});
+  const pages = doc.getNumberOfPages(); for (let i = 1; i <= pages; i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120, 130, 126); doc.text(`${clean(q.no)}  ·  page ${i} of ${pages}`, W / 2, 290, {align: "center"}); }
+  return doc;
+}
+const pdfName = q => `Quotation ${q.no.replace(/\//g, "-")} ${(q.client || "").replace(/[^\w ]/g, "").trim()}.pdf`.replace(/\s+/g, " ");
+async function sharePdf(q){
+  toast("Making PDF…");
+  try {
+    const doc = await quotePdf(q), name = pdfName(q);
+    if (isNative() && window.Capacitor.Plugins.Filesystem && window.Capacitor.Plugins.Share){
+      const {Filesystem, Share} = window.Capacitor.Plugins;
+      const w = await Filesystem.writeFile({path: name, data: doc.output("datauristring").split(",")[1], directory: "CACHE"});
+      await Share.share({title: name, url: w.uri, dialogTitle: "Send quotation"});
+    } else doc.save(name);
+  } catch(e){ if (!(e && /cancel/i.test(String(e.message || e)))) toast("Couldn't make the PDF. Check your internet once."); }
+}
+async function drivePdf(q){
+  if (!G.on()){ toast("Connect Google in Settings first"); return; }
+  toast("Saving to Drive…");
+  try {
+    const doc = await quotePdf(q), r = await G.savePdf(pdfName(q), doc.output("blob"));
+    const link = await G.shareAnyone(r.id);
+    q.pdfId = r.id; q.pdfLink = link;
+    if (q.id && Store.data.quotes[q.id]) { Store.data.quotes[q.id].pdfId = r.id; Store.data.quotes[q.id].pdfLink = link; Store.saveLocal(); }
+    refreshQuote(false); const el = $("#qpdf"); if (el) el.innerHTML = pdfLinkHtml(q);
+    toast("Saved to Drive; link added to the message");
+  } catch(e){ toast(e && e.code === "auth" ? "Sign in to Google again in Settings" : "Couldn't save to Drive"); }
+}
+const pdfLinkHtml = q => q.pdfLink ? `<p class="small" style="margin-top:8px">PDF in Drive: <a href="${esc(q.pdfLink)}" target="_blank" rel="noopener">open</a> (anyone with the link can view)</p>` : "";
+
+/* ---------- extension events ---------- */
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const a = b.dataset.act, id = b.dataset.id;
+  const guard = key => { if (ui.del === key){ ui.del = null; return true; } ui.del = key; setTimeout(() => { if (ui.del === key) ui.del = null; }, 3000); return false; };
+  switch(a){
+    case "logact": { const f = $("#actform"), v = {}; $$("input,select", f).forEach(el => { if (el.type === "radio") { if (el.checked) v.type = el.value; } else if (el.name) v[el.name] = el.value; });
+      logActivity(v.type || "meeting", v.lead, v.note.trim(), v.date || today()); toast(actName(v.type) + " logged"); rerender(); break; }
+    case "delact": if (!guard("a-" + id)){ b.innerHTML = svg("check"); toast("Tap again to delete"); return; } delete Store.data.activities[id]; Store.saveLocal(); rerender(); break;
+    case "logfor": ui.actLead = id; location.hash = "#activity"; break;
+    case "savepartner": { const f = $("#partform"), v = {}; $$("input,select,textarea", f).forEach(el => { if (el.name) v[el.name] = el.value; });
+      if (!v.name.trim()){ toast("Add a name first"); return; } const pid = f.dataset.id || uid();
+      Store.data.partners[pid] = {...(Store.data.partners[pid] || {}), ...v, id: pid, pct: num(v.pct), fixed: num(v.fixed)}; Store.saveLocal(); G.soon(); toast("Partner saved");
+      if (location.hash !== "#partner-" + pid) location.hash = "#partner-" + pid; else rerender(); break; }
+    case "delpartner": if (!guard("p-" + id)){ b.textContent = "Tap again to delete"; return; } delete Store.data.partners[id]; Store.saveLocal(); location.hash = "#partners"; break;
+    case "feepaid": { const o = Store.data.orders[id]; o.feePaid = !o.feePaid; Store.saveLocal(); G.soon(); rerender(); break; }
+    case "neworder": ui.order = newOrder(); break;
+    case "quotewon": { const q = ui.quote; if (!q.id){ toast("Save the quote first"); return; } const o = newOrder(q); o.id = uid(); Store.data.orders[o.id] = o; logActivity("order", q.lead, q.no); q.won = o.id; Store.data.quotes[q.id].won = o.id;
+      if (q.lead && Store.data.leads[q.lead]) { Store.data.leads[q.lead].stage = "Won"; Store.data.leads[q.lead].gDirty = true; }
+      Store.saveLocal(); G.soon(); ui.order = null; toast("Order created"); location.hash = "#order-" + o.id; break; }
+    case "addpay": { const amt = num($("#pay-amt").value); if (!amt){ toast("Enter the amount"); return; } ui.order.payments = ui.order.payments || []; ui.order.payments.push({amount: amt, date: $("#pay-date").value || today(), mode: $("#pay-mode").value});
+      if (ui.order.id){ Store.data.orders[ui.order.id] = JSON.parse(JSON.stringify(ui.order)); Store.data.orders[ui.order.id].gDirty = true; Store.saveLocal(); G.soon(); } rerender(); toast("Payment added"); break; }
+    case "delpay": ui.order.payments.splice(Number(b.dataset.i), 1); if (ui.order.id){ Store.data.orders[ui.order.id] = JSON.parse(JSON.stringify(ui.order)); Store.saveLocal(); } rerender(); break;
+    case "saveorder": { const o = ui.order; if (!o.client && !o.lead){ toast("Add the client name"); return; } const isNew = !o.id; if (isNew) o.id = uid(); o.gDirty = true;
+      Store.data.orders[o.id] = JSON.parse(JSON.stringify(o)); if (isNew) logActivity("order", o.lead, o.no); Store.saveLocal(); G.soon(); toast("Order saved");
+      if (location.hash !== "#order-" + o.id) location.hash = "#order-" + o.id; else rerender(); break; }
+    case "delorder": { if (!guard("o-" + id)){ b.textContent = "Tap again to delete"; return; } const o = Store.data.orders[id]; G.queueDelete(o && o.gDue); delete Store.data.orders[id]; ui.order = null; Store.saveLocal(); G.soon(); location.hash = "#orders"; break; }
+    case "addexp": { const f = $("#expform"), v = {}; $$("input,select", f).forEach(el => { if (el.name) v[el.name] = el.value; }); const amt = num(v.amount); if (!amt){ toast("Enter the amount"); return; }
+      const xid = uid(); Store.data.expenses[xid] = {id: xid, amount: amt, date: v.date || today(), cat: v.cat, note: v.note.trim()}; Store.saveLocal(); G.soon(); ui.expMonth = (v.date || today()).slice(0, 7); toast("Expense added"); rerender(); break; }
+    case "delexp": if (!guard("e-" + id)){ b.innerHTML = svg("check"); toast("Tap again to delete"); return; } delete Store.data.expenses[id]; Store.saveLocal(); rerender(); break;
+    case "expmonth": ui.expMonth = b.dataset.v; rerender(); break;
+    case "savetargets": { const v = readForm($("#tgtform")); S().targets = {meet: v.meet || 0, prop: v.prop || 0, order: v.order || 0}; Store.saveLocal(); toast("Targets saved"); break; }
+    case "savecid": S().gClientId = $("#g-cid").value.trim(); Store.saveLocal(); G.inited = false; toast("Client ID saved"); rerender(); break;
+    case "gconnect": G.connect(); break;
+    case "gdisconnect": G.disconnect(); break;
+    case "gsync": G.flush(true); break;
+    case "gbackup": toast("Backing up…"); G.token(true).then(() => G.backup()).then(() => { toast("Backed up to Drive"); rerender(); }).catch(() => toast("Couldn't back up to Drive")); break;
+    case "grestorelist": { const el = $("#gbackups"); el.innerHTML = `<p class="small muted">Loading backups…</p>`;
+      G.token(true).then(() => G.listBackups()).then(fs => { el.innerHTML = fs.length ? `<div class="list" style="margin-top:8px">${fs.map(f => `<button class="li" data-act="grestore" data-id="${f.id}"><span class="grow"><b>${esc(f.name)}</b><span>${new Date(f.modifiedTime).toLocaleString("en-IN", {day: "numeric", month: "short", hour: "numeric", minute: "2-digit"})}</span></span>${svg("chev")}</button>`).join("")}</div>` : `<p class="small muted">No backups in Drive yet.</p>`; })
+        .catch(() => { el.innerHTML = `<p class="small muted">Couldn't load Drive backups.</p>`; }); break; }
+    case "grestore": toast("Downloading backup…"); G.fetchBackup(id).then(j => { ui.restoreFile = {name: "Drive backup", json: j}; rerender(); }).catch(() => toast("Couldn't download that backup")); break;
+    case "qpdf": sharePdf(ui.quote); break;
+    case "qdrive": drivePdf(ui.quote); break;
+  }
+});
+document.addEventListener("input", e => {
+  const el = e.target;
+  if (el.dataset.in === "ord" && ui.order){ const f = el.dataset.f; ui.order[f] = el.type === "checkbox" ? el.checked : ["value","base","cost","fee"].includes(f) ? num(el.value) : el.value; }
+});
+document.addEventListener("change", e => {
+  const el = e.target;
+  if (el.dataset.in === "ord" && ui.order){ const f = el.dataset.f; ui.order[f] = el.type === "checkbox" ? el.checked : el.value;
+    if (f === "partner"){ const p = Store.data.partners[el.value]; if (p && ui.order.fee == null) { ui.order.fee = Math.round(p.fixed ? num(p.fixed) : (num(ui.order.base) || 0) * (num(p.pct) || 0) / 100); rerender(); } } }
+  if (el.dataset.in === "actradio"){ $$("#actform .chip").forEach(c => c.classList.toggle("on", c.contains(el))); }
+});
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && G.on() && G.pendingCount()) G.flush(false); });
 
 /* ---------- after render hooks ---------- */
 function after(h){
   if (h.startsWith("t-")) runCalc();
   if (h.startsWith("p-")) hydratePhotos();
+  if (h === "today") loadTodayEvents();
   const q = $("#q"); if (q && ui.focusQ){ q.focus(); q.setSelectionRange(q.value.length, q.value.length); ui.focusQ = false; }
 }
 
@@ -929,15 +1451,16 @@ document.addEventListener("click", e => {
     case "newlead": ui.newLead = {id:"", stage:"New", type:"builder", products:[b.dataset.p]}; break;
     case "newleadtype": ui.newLead = {id:"", stage:"New", type:b.dataset.v, products:[]}; break;
     case "savelead": saveLead(); break;
-    case "dellead": if (!delGuard("lead-"+id)){ b.textContent = "Tap again to delete"; return; } Store.deleteItem("leads", id); toast("Lead deleted"); location.hash = "#leads"; break;
+    case "dellead": if (!delGuard("lead-"+id)){ b.textContent = "Tap again to delete"; return; } { const l = Store.data.leads[id]; if (l) G.queueDelete(l.gFollow, l.gVisit); } Store.deleteItem("leads", id); G.soon(); toast("Lead deleted"); location.hash = "#leads"; break;
     case "newquote": ui.quote = newQuote(); break;
     case "quotefor": ui.quote = newQuote(Store.data.leads[id]); break;
     case "surveyfor": { const l = Store.data.leads[id]; ui.survey = {id:"", tpl:"general", client: l.company || l.name, lead: id, date: today(), items:{}, notes:""}; break; }
     case "newsurvey": ui.survey = null; break;
     case "qcustom": ui.quote.lines.push({desc:"", qty:1, rate:null, gst:18}); refreshQuote(true); { const d = $$('[data-in="ql"][data-f="desc"]'); if (d.length) d[d.length-1].focus(); } break;
     case "qdel": ui.quote.lines.splice(Number(b.dataset.i), 1); refreshQuote(true); break;
-    case "savequote": { const q = ui.quote; if (!q.lines.length){ toast("Add at least one item"); return; } if (!q.id) q.id = uid(); Store.data.quotes[q.id] = JSON.parse(JSON.stringify(q)); Store.saveItem("quotes", q.id);
+    case "savequote": { const q = ui.quote; if (!q.lines.length){ toast("Add at least one item"); return; } if (!q.id){ q.id = uid(); logActivity("proposal", q.lead, q.no); } Store.data.quotes[q.id] = JSON.parse(JSON.stringify(q)); Store.saveItem("quotes", q.id);
       if (q.lead && Store.data.leads[q.lead] && ["New","Contacted","Meeting"].includes(Store.data.leads[q.lead].stage)){ Store.data.leads[q.lead].stage = "Quote sent"; Store.saveItem("leads", q.lead); }
+      G.soon();
       toast("Quote saved"); if (location.hash !== "#quote-" + q.id) location.hash = "#quote-" + q.id; else rerender(); break; }
     case "copyquote": copyText(quoteText(ui.quote)); break;
     case "dupquote": { const c = JSON.parse(JSON.stringify(ui.quote)); const n = newQuote(); c.id = ""; c.no = n.no; c.date = today(); ui.quote = c; location.hash = "#quote"; break; }
@@ -989,7 +1512,7 @@ $("#back").addEventListener("click", () => { const to = $("#back").dataset.to; i
 /* ---------- boot ---------- */
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); ui.installEvt = e; if (cur === "notes") rerender(); });
 route();
-Store.init().then(() => { rerender(); setSync("ok"); });
+Store.init().then(() => { rerender(); setSync("ok"); if (G.on()) setTimeout(() => G.flush(false), 1500); });
 if ("serviceWorker" in navigator && location.protocol === "https:"){
   navigator.serviceWorker.register("sw.js").catch(() => {});
   let had = !!navigator.serviceWorker.controller;

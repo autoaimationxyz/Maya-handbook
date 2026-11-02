@@ -4,7 +4,7 @@ const CACHE = "maya-" + BUILD;
 const CORE = [
   "./", "index.html", "manifest.webmanifest", "offline.html",
   "css/style.css?v=" + BUILD,
-  "js/products1.js?v=" + BUILD, "js/products2.js?v=" + BUILD, "js/learn.js?v=" + BUILD, "js/app.js?v=" + BUILD,
+  "js/config.js?v=" + BUILD, "js/products1.js?v=" + BUILD, "js/products2.js?v=" + BUILD, "js/learn.js?v=" + BUILD, "js/app.js?v=" + BUILD,
   "icons/icon-192.png", "icons/icon-512.png"
 ];
 
@@ -23,7 +23,7 @@ self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  const isFont = url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com";
+  const isFont = url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com" || url.hostname === "cdnjs.cloudflare.com";
   if (isFont) {
     // fonts: cache first
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {

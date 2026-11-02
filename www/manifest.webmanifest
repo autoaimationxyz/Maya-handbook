@@ -2,7 +2,7 @@
   "name": "Maya Traders",
   "short_name": "Maya Traders",
   "description": "Products, EEE lessons, calculators, leads, quotes and site surveys.",
-  "start_url": "./#products",
+  "start_url": "./#today",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

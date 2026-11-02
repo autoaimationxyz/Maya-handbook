@@ -1,6 +1,13 @@
 # Maya Traders
 
-A personal sales app for Maya Traders (Delhi NCR). It covers 15 product lines in selling order, short EEE lessons, site calculators, a leads tracker, a quote maker with WhatsApp sharing, site-survey checklists and notes.
+Your one app for Maya Traders sales in Delhi NCR:
+
+- **Today:** today's Google Calendar, due follow-ups, site visits, payments to collect, and the week's activity against your targets.
+- **Products:** 15 lines in selling order, each with study notes, sizing, pitch lines, objections and your own prices and photos.
+- **Learn:** 12 short EEE lessons with quizzes.
+- **Tools:** 10 site calculators.
+- **Sell:** leads, quotes (letterhead PDF and WhatsApp), orders and payments, referral partners and fees, site surveys and meeting prep.
+- **Also:** an activity log, expenses, notes, and Google Calendar and Drive sync.
 
 - **Web app:** `https://<your-github-username>.github.io/<repo-name>/`
 - **Android app:** the latest `MayaTraders.apk` on this repo's **Releases** page.
@@ -28,9 +35,13 @@ Edit content or code ──push to main──▶ "Publish web app" workflow ─�
    Keep `maya-release.jks` and the password safe and private. Every future APK must be signed with the same key, or Android will refuse to update the app.
 4. **Build the APK.** Go to **Actions → Build Android app → Run workflow**. When it finishes, open **Releases** on your phone, download `MayaTraders.apk` and install it. Android will ask you to allow installs from your browser or Files app.
 
+## Google Calendar and Drive
+
+See **[GOOGLE_SETUP.md](GOOGLE_SETUP.md)**: a 10-minute, one-time setup. Then put the Web client ID in `app.config.json`, or send it to Claude, and push. That rebuilds the APK.
+
 ## Your data
 
-Leads, quotes, surveys, prices, notes and photos are saved **on the phone**, inside the app. Nothing personal goes to GitHub.
+Leads, quotes, orders, partners, expenses, surveys, prices, notes and photos are saved **on the phone**, inside the app. With Google connected, they also back up to your own Drive automatically. Nothing personal goes to GitHub.
 
 - **Notes → Make backup** creates a backup file. Save it to Google Drive or send it to yourself on WhatsApp. Do this every week or two; the app reminds you after 14 days.
 - **Notes → Restore from backup** loads a backup on a new phone, or after reinstalling.
@@ -44,7 +55,9 @@ Leads, quotes, surveys, prices, notes and photos are saved **on the phone**, ins
 | `www/js/products1.js` | Products: cables, earthing, stabilizer, UPS, solar, EV |
 | `www/js/products2.js` | Products: VFD, PLC, SCADA, BMS, dam gate, LED wall, water, steam, PUF panels |
 | `www/js/learn.js` | Lessons, meeting playbooks, survey checklists, market drivers |
-| `www/js/app.js` | Screens, calculators, storage, backup |
+| `www/js/app.js` | Screens, calculators, storage, backup, Google sync, quote PDFs |
+| `www/js/config.js` | Written at build time from `app.config.json` |
+| `app.config.json` | App name, Android package id, Google Web client ID |
 | `www/css/style.css` | Design |
 | `www/sw.js` | Offline support and update caching |
 | `assets/` | App icon and splash screen (for the APK) |
