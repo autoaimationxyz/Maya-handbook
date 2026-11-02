@@ -1,0 +1,20 @@
+{
+  "name": "maya-traders-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Maya Traders sales handbook: web app (GitHub Pages) + Android app (Capacitor).",
+  "scripts": {
+    "stamp": "node scripts/stamp.js",
+    "serve": "npx http-server www -p 8080 -c-1"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/filesystem": "^6.0.0",
+    "@capacitor/share": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.2.0"
+  }
+}

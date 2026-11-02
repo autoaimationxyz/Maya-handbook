@@ -1,0 +1,43 @@
+name: Publish web app
+
+# Runs on every change to the app's files. The phone app loads this site,
+# so this is what delivers updates to your phone.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "www/**"
+      - "scripts/stamp.js"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Stamp build id and app address
+        run: |
+          OWNER=$(echo "${GITHUB_REPOSITORY%%/*}" | tr '[:upper:]' '[:lower:]')
+          REPO="${GITHUB_REPOSITORY##*/}"
+          node scripts/stamp.js "${GITHUB_SHA::7}" "https://$OWNER.github.io/$REPO/"
+
+      - name: Publish to GitHub Pages (gh-pages branch)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./www
+          force_orphan: true
+          commit_message: "Publish ${{ github.sha }}"

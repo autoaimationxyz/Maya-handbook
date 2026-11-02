@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maya Traders</title>
+<style>
+  :root{--bg:#15201C;--fg:#E4ECE8;--muted:#93A39C;--copper:#E18B56}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;text-align:center}
+  main{max-width:320px;padding:24px}
+  h1{font-size:20px;margin:16px 0 8px}
+  p{color:var(--muted);margin:0 0 20px}
+  button{background:var(--copper);color:#1A0F08;border:0;border-radius:10px;padding:12px 20px;font:600 15px system-ui,sans-serif}
+</style>
+</head>
+<body>
+<main>
+  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#E18B56" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
+  <h1>Connect to the internet once</h1>
+  <p>The app needs a connection the first time it opens. After that it works offline.</p>
+  <button onclick="location.href='__APP_URL__'">Try again</button>
+</main>
+</body>
+</html>
