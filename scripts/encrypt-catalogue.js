@@ -13,7 +13,7 @@ const { webcrypto: crypto } = require("crypto");
   let prev = null; try { prev = JSON.parse(fs.readFileSync(dest, "utf8")); } catch (e) {}
   const salt = prev && !process.env.MT_NEW_SALT ? Uint8Array.from(Buffer.from(prev.salt, "base64")) : crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const iter = prev && !process.env.MT_NEW_SALT ? prev.iter : 600000;
+  const iter = prev && !process.env.MT_NEW_SALT ? prev.iter : Number(process.env.MT_ITER || 2000000);
   const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass.normalize("NFKC")), "PBKDF2", false, ["deriveKey"]);
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain));

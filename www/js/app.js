@@ -118,7 +118,7 @@ function setSync(s){
   const stale = !last || (Date.now() - new Date(last).getTime()) > 14*864e5;
   el.className = "sync " + (s === "err" ? "local" : stale ? "local" : "ok");
   el.querySelector("span").textContent = s === "err" ? "Storage full" : stale ? "Back up" : (typeof G !== "undefined" && G.on() ? "Synced" : "Saved");
-  el.title = stale ? "Saved on this phone. Make a backup from Notes." : "Saved on this phone; backed up " + niceDate(last.slice(0,10));
+  el.title = stale ? "Saved on this phone. Tap to make a backup in Settings." : "Saved on this phone; backed up " + niceDate(last.slice(0,10));
 }
 /* photos live in IndexedDB on the phone */
 const Photos = {
@@ -410,7 +410,7 @@ function vLesson(id){
   const pr = (Store.data.progress.lessons || {})[id] || {};
   ui.quizAns = ui.quizAns && ui.quizAns.id === id ? ui.quizAns : {id, a:{}};
   let html = `<div class="block"><p class="lead-p" style="margin-bottom:10px">${esc(l.intro)}</p>${l.body.map(b=>`<div class="term"><b>${esc(b[0])}</b>${esc(b[1])}</div>`).join("")}</div>
-    <div class="block quiz"><h3>Quick check</h3><div id="quiz">${quizHtml(l)}</div></div>
+    <div class="block quiz"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Quick check</h3>${Object.keys(ui.quizAns.a).length ? `<button class="btn sm ghost" data-act="quizretry" data-id="${l.id}">Try again</button>` : ""}</div><div id="quiz" style="margin-top:8px">${quizHtml(l)}</div></div>
     <div class="btnbar">${pr.done ? `<span class="pill good">${svg("check","width=12 height=12")} Done${pr.score!=null?" · "+pr.score+"/3":""}</span>` : `<button class="btn" data-act="lessondone" data-id="${id}">${svg("check")} Mark as done</button>`}
     ${nxt ? `<a class="btn pri" href="#l-${nxt.id}" data-act="lfrom" data-v="${pid}">Next: ${esc(nxt.title)}</a>` : pid ? `<a class="btn pri" href="#p-${pid}">Back to ${esc(byId[pid].name.split("(")[0].trim())}</a>` : ""}</div>`;
   return html;
@@ -851,9 +851,13 @@ function vPrep(id){
 
 /* ---------- QUOTES ---------- */
 function fy(){ const d = new Date(), y = d.getFullYear() % 100, m = d.getMonth(); return m >= 3 ? `${y}-${y+1}` : `${y-1}-${y}`; }
+function nextNo(coll, prefix){
+  const re = new RegExp("^" + prefix + "/" + fy() + "/(\\d+)$");
+  const max = Object.values(Store.data[coll] || {}).reduce((m, x) => { const k = re.exec(x.no || ""); return k ? Math.max(m, +k[1]) : m; }, 0);
+  return `${prefix}/${fy()}/${String(max + 1).padStart(3, "0")}`;
+}
 function newQuote(lead){
-  const n = Object.keys(Store.data.quotes).length + 1;
-  return {id:"", no:`MT/${fy()}/${String(n).padStart(3,"0")}`, date: today(), client: lead ? (lead.company || lead.name || "") : "", contact: lead ? lead.name||"" : "", phone: lead ? lead.phone||"" : "", lead: lead ? lead.id : "",
+  return {id:"", no: nextNo("quotes", "MT"), date: today(), client: lead ? (lead.company || lead.name || "") : "", contact: lead ? lead.name||"" : "", phone: lead ? lead.phone||"" : "", lead: lead ? lead.id : "",
     place:"intra", lines:[], terms:"Prices valid for 7 days (cable prices change with copper).\nPayment: 50% advance with order, balance before dispatch.\nDelivery: 3-7 working days from order.\nWarranty: as per manufacturer."};
 }
 function quoteTotals(q){
@@ -1042,8 +1046,7 @@ function orderTotals(o){
   return {paid, bal: Math.max(0, value - paid), profit: base - (num(o.cost) || 0) - (num(o.fee) || 0), base, value};
 }
 function newOrder(q){
-  const n = Object.keys(Store.data.orders).length + 1;
-  const o = {id:"", no:`MO/${fy()}/${String(n).padStart(3, "0")}`, date: today(), client:"", phone:"", lead:"", quote:"", items:"", value:null, base:null, cost:null, partner:"", fee:null, feePaid:false, status:"Confirmed", due:"", payments:[], notes:""};
+  const o = {id:"", no: nextNo("orders", "MO"), date: today(), client:"", phone:"", lead:"", quote:"", items:"", value:null, base:null, cost:null, partner:"", fee:null, feePaid:false, status:"Confirmed", due:"", payments:[], notes:""};
   if (q){ const t = quoteTotals(q), l = Store.data.leads[q.lead], p = l && l.partner ? Store.data.partners[l.partner] : null;
     Object.assign(o, {client:q.client, phone:q.phone, lead:q.lead || "", quote:q.id, items:q.lines.map(x => `${x.desc} × ${fmt(num(x.qty) || 0, 2)}`).join("\n"), value:Math.round(t.grand), base:Math.round(t.sub),
       partner: p ? p.id : "", fee: p ? Math.round(p.fixed ? num(p.fixed) : t.sub * (num(p.pct) || 0) / 100) : null}); }
@@ -1738,7 +1741,8 @@ document.addEventListener("click", e => {
     case "toquote": { if (!ui.quote || ui.quote.id) ui.quote = newQuote(); addQuoteLine(id, Number(b.dataset.i)); toast("Added to quote"); location.hash = "#quote"; break; }
     case "delphoto": { const key = "ph-" + b.dataset.ph; if (!delGuard(key)){ toast("Tap ✕ again to remove the photo"); return; } const p = byId[id], s = pState(p); s.photos = s.photos.filter(x => x !== b.dataset.ph); Store.saveDoc("products"); Photos.del(b.dataset.ph); refreshPhotos(); break; }
     case "quiz": { const l = L.find(x => x.id === id); ui.quizAns.a[b.dataset.q] = Number(b.dataset.o); $("#quiz").innerHTML = quizHtml(l);
-      if (Object.keys(ui.quizAns.a).length === l.quiz.length){ const score = l.quiz.filter((q,i) => ui.quizAns.a[i] === q.a).length; const pr = Store.data.progress; pr.lessons = pr.lessons || {}; pr.lessons[id] = {done:true, score}; Store.saveDoc("progress", 0); toast(`Lesson done: ${score}/3`); } break; }
+      if (Object.keys(ui.quizAns.a).length === l.quiz.length){ const score = l.quiz.filter((q,i) => ui.quizAns.a[i] === q.a).length; const pr = Store.data.progress; pr.lessons = pr.lessons || {}; pr.lessons[id] = {done:true, score}; Store.saveDoc("progress", 0); toast(`Lesson done: ${score}/3`); rerender(); } break; }
+    case "quizretry": ui.quizAns = {id, a:{}}; $("#quiz").innerHTML = quizHtml(L.find(x => x.id === id)); break;
     case "lessondone": { const pr = Store.data.progress; pr.lessons = pr.lessons || {}; pr.lessons[id] = {...(pr.lessons[id]||{}), done:true}; Store.saveDoc("progress", 0); rerender(); break; }
     case "upsadd": ui.upsRows.push({n:"New load", w:100, q:1}); rerender(); break;
     case "upsdel": ui.upsRows.splice(Number(b.dataset.i), 1); rerender(); break;
@@ -1803,11 +1807,11 @@ document.addEventListener("change", e => {
   if (k === "sv"){ ui.survey[el.dataset.f] = el.value; return; }
   if (k === "svc"){ const it = ui.survey.items[el.dataset.k] = ui.survey.items[el.dataset.k] || {}; it.ok = el.checked; const T = SV[ui.survey.tpl]; const c = $("#svcount"); if (c) c.textContent = T.items.filter((_, i) => (ui.survey.items[ui.survey.tpl+i]||{}).ok).length + "/" + T.items.length; return; }
 });
-$("#sync").addEventListener("click", () => { location.hash = "#notes"; });
+$("#sync").addEventListener("click", () => { location.hash = "#settings"; });
 $("#back").addEventListener("click", () => { const to = $("#back").dataset.to; if (to) location.hash = to; });
 
 /* ---------- boot ---------- */
-window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); ui.installEvt = e; if (cur === "notes") rerender(); });
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); ui.installEvt = e; if (cur === "settings") rerender(); });
 route();
 CT.auto();
 Store.init().then(() => { rerender(); setSync("ok"); if (G.on()) setTimeout(() => G.flush(false), 1500); if (Cal.on()) setTimeout(() => Cal.flush(false), 1200); });

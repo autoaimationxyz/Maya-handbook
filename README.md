@@ -23,7 +23,7 @@ Edit content or code ──push to main──▶ "Publish web app" workflow ─�
 
 - **Content and features** (products, prices, lessons, calculators, screens) live in `www/`. Any push to `main` that touches `www/` republishes the site, and the phone picks it up on the next open. No reinstall needed.
 - **The Android shell** (app name, icon, permissions) only changes when `package.json`, `assets/` or the Android workflow change. That rebuilds the APK and creates a new Release; install it over the old one.
-- To check by hand: **Notes → Backup & app → Check for updates.** The version shown there is the commit the app is running.
+- To check by hand: **Today → Settings → App → Check for updates.** The version shown there is the commit the app is running.
 
 ## One-time setup
 
