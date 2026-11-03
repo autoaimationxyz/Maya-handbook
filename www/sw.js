@@ -4,8 +4,9 @@ const CACHE = "maya-" + BUILD;
 const CORE = [
   "./", "index.html", "manifest.webmanifest", "offline.html",
   "css/style.css?v=" + BUILD,
-  "js/config.js?v=" + BUILD, "js/products1.js?v=" + BUILD, "js/products2.js?v=" + BUILD, "js/learn.js?v=" + BUILD, "js/app.js?v=" + BUILD,
-  "icons/icon-192.png", "icons/icon-512.png"
+  "js/config.js?v=" + BUILD, "js/products1.js?v=" + BUILD, "js/products2.js?v=" + BUILD, "js/products3.js?v=" + BUILD, "js/learn.js?v=" + BUILD, "js/app.js?v=" + BUILD,
+  "icons/icon-192.png", "icons/icon-512.png",
+  "data/chemotech.enc.json?v=" + BUILD
 ];
 
 self.addEventListener("install", e => {

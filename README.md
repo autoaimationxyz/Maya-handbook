@@ -3,8 +3,9 @@
 Your one app for Maya Traders sales in Delhi NCR:
 
 - **Today:** today's Google Calendar, due follow-ups, site visits, payments to collect, and the week's activity against your targets.
-- **Products:** 15 lines in selling order, each with study notes, sizing, pitch lines, objections and your own prices and photos.
-- **Learn:** 12 short EEE lessons with quizzes.
+- **Products:** 13 lines Maya Traders sells, in selling order, each with study notes, sizing, pitch lines, objections and your own prices and photos.
+- **Chemotech:** the full Chemotech International catalogue (56 products, 328 variants, all makes, company details), searchable and locked with a passcode.
+- **Learning:** 14 short EEE lessons with quizzes, inside each product's Learn tab.
 - **Tools:** 10 site calculators.
 - **Sell:** leads, quotes (letterhead PDF and WhatsApp), orders and payments, referral partners and fees, site surveys and meeting prep.
 - **Also:** an activity log, expenses, notes, phone calendar sync, and backups to Google Drive.

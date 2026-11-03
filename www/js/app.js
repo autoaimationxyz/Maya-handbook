@@ -10,7 +10,12 @@ const STAGES = [
   {id:"later", label:"Later", cls:"st-later"}
 ];
 const stageOf = id => STAGES.find(s => s.id === id) || STAGES[3];
-const ORDER = ["cables","earthing","stabilizer","ups","solar","ev","vfd","plc","ledwall","bms","wtp","steam","scada","damgate","puf"];
+const ORDER = ["cables","switchgear","earthing","stabilizer","ups","lighting","cctv","solar","ev","vfd","plc","ledwall","bms","wtp","steam","scada","damgate","puf"];
+const GUIDES = ["wtp","steam","scada","damgate","puf"]; // Chemotech-only: reachable from the Chemotech tab, not in Maya's list
+P.forEach(p => { p.maya = !GUIDES.includes(p.id); });
+const MP = P; // all product guides
+const MAYA_P = () => P.filter(p => p.maya);
+const LFOR = window.LESSON_FOR || {};
 P.sort((a, b) => (ORDER.indexOf(a.id) + 1 || 99) - (ORDER.indexOf(b.id) + 1 || 99));
 
 /* ---------- icons ---------- */
@@ -35,6 +40,10 @@ const IC = {
   calc:'<rect x="5" y="2" width="14" height="20" rx="2"/><rect x="8" y="5" width="8" height="4"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 17h.01M12 17h.01M15.5 17h.01" stroke-width="2.6"/>',
   bag:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
   note:'<path d="M5 3h10l4 4v14H5z"/><path d="M14 3v5h5M8 12h8M8 16h6"/>',
+  switch:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8"/><rect x="9" y="14" width="2" height="4" rx=".5"/><rect x="13" y="14" width="2" height="4" rx=".5"/>',
+  bulb:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+  factory:'<path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17z"/><path d="M7 17h2M12 17h2M17 17h2"/>',
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   back:'<path d="M15 18l-6-6 6-6"/>', chev:'<path d="M9 6l6 6-6 6"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
   copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
@@ -172,7 +181,7 @@ const margin = (c, s) => (c != null && s) ? (s - c) / s * 100 : null;
 /* ---------- router ---------- */
 let cur = "products";
 const ui = {ptab:{}, pfilter:"all", q:"", leadFilter:"open", quote:null, survey:null, upsRows:null, del:null};
-const TAB_OF = h => /^(p-|products|pricebook)/.test(h) ? "products" : /^(l-|learn)/.test(h) ? "learn" : /^(t-|tools)/.test(h) ? "tools" : /^(today|notes|settings|activity|expenses)$/.test(h) ? "today" : "sell";
+const TAB_OF = h => /^(c-|chemotech|learn)/.test(h) ? "chemotech" : /^(p-|products|pricebook|l-)/.test(h) ? "products" : /^(t-|tools)/.test(h) ? "tools" : /^(today|notes|settings|activity|expenses)$/.test(h) ? "today" : "sell";
 const ROOT = {products:1, learn:1, tools:1, sell:1, notes:1};
 
 function setHeader(eyebrow, title, back){
@@ -199,7 +208,9 @@ function route(){
     else if (h === "products") html = vProducts();
     else if (h.startsWith("p-")) html = vProduct(h.slice(2));
     else if (h === "pricebook") html = vPriceBook();
-    else if (h === "learn") html = vLearn();
+    else if (h === "learn" || h === "chemotech") html = vChemotech();
+    else if (h === "c-about") html = vCAbout();
+    else if (h.startsWith("c-")) html = vCItem(h.slice(2));
     else if (h.startsWith("l-")) html = vLesson(h.slice(2));
     else if (h === "tools") html = vTools();
     else if (h.startsWith("t-")) html = vCalc(h.slice(2));
@@ -238,20 +249,23 @@ function pItem(p){
 function vProducts(){
   setHeader("Maya Traders", "Products");
   const q = ui.q.trim();
-  let html = `<div class="search" style="margin-bottom:6px">${svg("search")}<input id="q" type="search" placeholder="Search products, lessons, tools" value="${esc(ui.q)}" autocomplete="off" aria-label="Search"></div>`;
+  let html = `<div class="search" style="margin-bottom:6px">${svg("search")}<input id="q" type="search" placeholder="Search products, lessons, tools, Chemotech" value="${esc(ui.q)}" autocomplete="off" aria-label="Search"></div>`;
 
   if (q){
-    const ps = P.filter(p => prodMatch(p, q));
+    const ps = MAYA_P().filter(p => prodMatch(p, q));
+    const cis = CT.ready() ? ctSearch(q).slice(0, 8) : [];
     const ls = L.filter(l => (l.title + " " + l.intro + " " + l.body.map(b=>b.join(" ")).join(" ")).toLowerCase().includes(q.toLowerCase()));
     const cs = CALCS.filter(c => (c.name + " " + c.desc).toLowerCase().includes(q.toLowerCase()));
-    html += `<div class="sec-h"><span class="eyebrow">${ps.length + ls.length + cs.length} results</span></div>`;
+    html += `<div class="sec-h"><span class="eyebrow">${ps.length + ls.length + cs.length + cis.length} results</span></div>`;
     if (ps.length) html += `<div class="plist">${ps.map(pItem).join("")}</div>`;
     if (ls.length) html += `<div class="sec-h"><h3>Lessons</h3></div><div class="list">${ls.map(l => `<a class="li" href="#l-${l.id}">${svg("book")}<span class="grow"><b>${esc(l.title)}</b><span>${esc(l.intro)}</span></span>${svg("chev")}</a>`).join("")}</div>`;
     if (cs.length) html += `<div class="sec-h"><h3>Calculators</h3></div><div class="list">${cs.map(c => `<a class="li" href="#t-${c.id}">${svg("calc")}<span class="grow"><b>${esc(c.name)}</b><span>${esc(c.desc)}</span></span>${svg("chev")}</a>`).join("")}</div>`;
-    if (!ps.length && !ls.length && !cs.length) html += `<div class="empty"><b>Nothing found</b>Try a product name like "UPS", or a word like "earthing".</div>`;
+    if (cis.length) html += `<div class="sec-h"><h3>Chemotech catalogue</h3><a class="small" href="#chemotech" data-act="ctq" data-v="${esc(q)}">See all</a></div><div class="list">${cis.map(ctRow).join("")}</div>`;
+    if (!ps.length && !ls.length && !cs.length && !cis.length) html += `<div class="empty"><b>Nothing found</b>Try a product name like "UPS", or a word like "earthing".</div>`;
     return html;
   }
-  html += `<div class="sec-h"><span class="eyebrow">${P.length} products, in selling order</span></div><div class="plist">${P.map(pItem).join("")}</div>`;
+  html += `<div class="sec-h"><span class="eyebrow">${MAYA_P().length} products, in selling order</span></div><div class="plist">${MAYA_P().map(pItem).join("")}</div>
+  <a class="li list" href="#chemotech" style="margin-top:12px;border:1px solid var(--line);border-radius:12px">${svg("factory")}<span class="grow"><b>Full Chemotech catalogue</b><span>56 products, 328 variants, all makes</span></span>${svg("chev")}</a>`;
   html += `<div class="btnbar" style="margin-top:18px"><a class="btn" href="#pricebook">${svg("pct")} My price book</a></div>`;
   return html;
 }
@@ -259,7 +273,8 @@ function vProducts(){
 function vProduct(id){
   const p = byId[id];
   if (!p) return `<div class="empty"><b>Product not found</b></div>`;
-  setHeader(p.cat, p.name, "#products");
+  setHeader(p.cat, p.name, p.maya ? "#products" : (ui.fromC ? "#c-" + ui.fromC : "#chemotech"));
+  ui.fromProduct = id;
   const tab = ui.ptab[id] || "overview";
   const rows = peekRows(p);
   const lo = Math.min(...rows.map(r=>r.low).filter(Boolean)), hi = Math.max(...rows.map(r=>r.high).filter(Boolean));
@@ -268,6 +283,7 @@ function vProduct(id){
     <dl class="kv"><div><dt>Category</dt><dd>${esc(p.cat)}</dd></div>
     <div><dt>Buyers</dt><dd>${esc(p.buyers.split(",")[0])}${p.buyers.includes(",")?" +":""}</dd></div>
     <div><dt>Market</dt><dd class="mono" style="font-size:12.5px">${isFinite(lo)?inrS(lo)+"–"+inrS(hi):"Project"}</dd></div></dl></div>`;
+  if (!p.maya) html += `<div class="banner" style="margin-top:12px"><b>Chemotech product.</b> Not in Maya Traders' own list: it needs engineering and a long sales cycle. Learn it, then pass enquiries to the Chemotech team.</div>`;
   html += `<div class="seg" role="tablist">${[["overview","Learn"],["sizing","Size it"],["sell","Sell it"],["prices","Prices"]].map(([k,l]) => `<button class="${tab===k?"on":""}" data-act="ptab" data-id="${id}" data-v="${k}" role="tab" aria-selected="${tab===k}">${l}</button>`).join("")}</div>`;
   html += `<div id="ppanel">${pPanel(p, tab)}</div>`;
   return html;
@@ -278,7 +294,9 @@ function pPanel(p, tab){
     <div class="block"><h3>Why customers buy it</h3><p>${esc(p.why)}</p></div>
     <div class="block"><h3>How it works</h3><ol class="steps">${p.how.map(s=>`<li><span>${esc(s)}</span></li>`).join("")}</ol></div>
     <div class="block"><h3>Types you'll hear about</h3><div class="types">${p.types.map(t=>`<div><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></div>`).join("")}</div></div>
-    <div class="block"><h3>Brands to know</h3><div class="brands">${p.brands.map(b=>`<span>${esc(b)}</span>`).join("")}</div></div>`;
+    <div class="block"><h3>Brands to know</h3><div class="brands">${p.brands.map(b=>`<span>${esc(b)}</span>`).join("")}</div></div>
+    ${lessonsBlock(p)}
+    ${ctLinksBlock(p)}`;
   if (tab === "sizing") return `
     <div class="block"><h3>How to size it</h3><ul class="bul">${p.sizing.map(s=>`<li>${esc(s)}</li>`).join("")}</ul>
     ${p.calc ? `<div class="btnbar"><a class="btn pri" href="#t-${p.calc}">${svg("calc")} Open the calculator</a></div>` : ""}</div>
@@ -370,33 +388,31 @@ function vPriceBook(){
   return html;
 }
 
-/* ---------- LEARN ---------- */
-function vLearn(){
-  setHeader("EEE refresher", "Learn");
-  const pr = Store.data.progress.lessons || {};
-  const done = L.filter(l => pr[l.id] && pr[l.id].done).length;
-  let html = `<div class="block"><div class="row" style="justify-content:space-between"><b>${done} of ${L.length} lessons done</b><span class="small muted mono">${Math.round(done/L.length*100)}%</span></div>
-    <div class="progress" style="margin-top:8px"><i style="width:${done/L.length*100}%"></i></div>
-    <p class="small muted" style="margin-top:8px">Short lessons in plain English, each with a 3-question check. Product-specific learning is inside every product page.</p></div>
-    <div class="list" style="margin-top:12px">`;
-  html += L.map((l, i) => { const d = pr[l.id] || {};
-    return `<a class="lcard" href="#l-${l.id}"><span class="lnum ${d.done?"done":""}">${d.done ? svg("check","width=16 height=16") : String(i+1).padStart(2,"0")}</span>
-      <span class="lbody" style="min-width:0"><h3>${esc(l.title)}</h3><p>${esc(l.intro)}</p></span>
-      <span class="small muted mono">${d.score!=null ? d.score+"/3" : l.mins+" min"}</span></a>`; }).join("");
-  html += `</div>`;
-  html += `<div class="sec-h"><h3>Learn by product</h3></div><div class="plist">${P.map(p=>`<a class="pitem" href="#p-${p.id}"><span class="ico">${svg(p.icon)}</span><span class="nm">${esc(p.name)}</span>${svg("chev")}</a>`).join("")}</div>`;
-  return html;
+/* ---------- LESSONS (inside each product) ---------- */
+function lessonsFor(pid){ return (LFOR[pid] || []).map(id => L.find(l => l.id === id)).filter(Boolean); }
+function lessonCard(l, pid){
+  const d = (Store.data.progress.lessons || {})[l.id] || {};
+  return `<a class="lcard" href="#l-${l.id}" data-act="lfrom" data-v="${pid || ""}"><span class="lnum ${d.done ? "done" : ""}">${d.done ? svg("check","width=16 height=16") : svg("book","width=16 height=16")}</span>
+    <span class="lbody" style="min-width:0"><h3>${esc(l.title)}</h3><p>${esc(l.intro)}</p></span>
+    <span class="small muted mono">${d.score != null ? d.score + "/3" : l.mins + " min"}</span></a>`;
+}
+function lessonsBlock(p){
+  const ls = lessonsFor(p.id); if (!ls.length) return "";
+  const pr = Store.data.progress.lessons || {}, done = ls.filter(l => pr[l.id] && pr[l.id].done).length;
+  return `<div class="sec-h"><h3>Lessons for ${esc(p.name.split("(")[0].trim())}</h3><span class="small muted">${done} of ${ls.length} done</span></div>
+    <div class="list">${ls.map(l => lessonCard(l, p.id)).join("")}</div>`;
 }
 function vLesson(id){
   const l = L.find(x => x.id === id); if (!l) return `<div class="empty"><b>Lesson not found</b></div>`;
-  const idx = L.indexOf(l);
-  setHeader("Lesson " + (idx+1) + " of " + L.length, l.title, "#learn");
+  const pid = ui.lessonFrom && byId[ui.lessonFrom] ? ui.lessonFrom : (Object.keys(LFOR).find(k => (LFOR[k] || []).includes(id)) || "");
+  const seq = pid ? lessonsFor(pid) : L, idx = seq.indexOf(l), nxt = idx >= 0 && idx < seq.length - 1 ? seq[idx + 1] : null;
+  setHeader(pid ? "Lesson · " + byId[pid].name.split("(")[0].trim() : "Lesson", l.title, pid ? "#p-" + pid : "#products");
   const pr = (Store.data.progress.lessons || {})[id] || {};
   ui.quizAns = ui.quizAns && ui.quizAns.id === id ? ui.quizAns : {id, a:{}};
   let html = `<div class="block"><p class="lead-p" style="margin-bottom:10px">${esc(l.intro)}</p>${l.body.map(b=>`<div class="term"><b>${esc(b[0])}</b>${esc(b[1])}</div>`).join("")}</div>
     <div class="block quiz"><h3>Quick check</h3><div id="quiz">${quizHtml(l)}</div></div>
     <div class="btnbar">${pr.done ? `<span class="pill good">${svg("check","width=12 height=12")} Done${pr.score!=null?" · "+pr.score+"/3":""}</span>` : `<button class="btn" data-act="lessondone" data-id="${id}">${svg("check")} Mark as done</button>`}
-    ${idx < L.length-1 ? `<a class="btn pri" href="#l-${L[idx+1].id}">Next: ${esc(L[idx+1].title)}</a>` : ""}</div>`;
+    ${nxt ? `<a class="btn pri" href="#l-${nxt.id}" data-act="lfrom" data-v="${pid}">Next: ${esc(nxt.title)}</a>` : pid ? `<a class="btn pri" href="#p-${pid}">Back to ${esc(byId[pid].name.split("(")[0].trim())}</a>` : ""}</div>`;
   return html;
 }
 function quizHtml(l){
@@ -418,6 +434,8 @@ const CALCS = [
   {id:"vfd", name:"VFD energy savings", desc:"Motor, hours, speed → yearly savings and payback", icon:"vfd"},
   {id:"earth", name:"Earth pit planner", desc:"Property type → pits, lightning and SPDs", icon:"earth"},
   {id:"led", name:"LED wall planner", desc:"Wall size, distance → pitch, resolution, cost", icon:"led"},
+  {id:"light", name:"Lighting planner", desc:"Room size, use → lumens, fittings and watts", icon:"bulb"},
+  {id:"cctv", name:"CCTV planner", desc:"Cameras, days → storage, PoE switch and budget", icon:"camera"},
   {id:"margin", name:"Price, margin & GST", desc:"Cost → selling price with GST", icon:"pct"},
   {id:"convert", name:"Quick converter", desc:"HP↔kW, kW↔kVA, kW→amps", icon:"swap"}
 ];
@@ -656,6 +674,40 @@ led: {
     + howBlock(`Pixels across = width ft × 304.8 ÷ pitch mm = ${px}\nPixels down = height ft × 304.8 ÷ pitch = ${py}\nArea = ${fmt(area,0)} sq ft (${fmt(m2,1)} m²)\nPower: avg ≈ 120 W/m², max ≈ ${pitch>=6?700:350} W/m²`);
   }
 },
+light: {
+  form(){ return `<div class="block"><div class="grid2">${F.n("len","Length (ft)",40)}${F.n("wid","Width (ft)",25)}
+    ${F.sel("use","Space",[["400","Office / showroom (400 lux)"],["300","Factory work area (300 lux)"],["200","Warehouse (200 lux)"],["150","Home living room (150 lux)"],["100","Corridor / parking (100 lux)"]],"400")}
+    ${F.sel("fit","Fitting",[["1500|15|panel15","LED panel 15 W (1,500 lm)"],["3600|36|panel36","LED panel 36 W (3,600 lm)"],["2000|20|batten","LED batten 20 W (2,000 lm)"],["18000|150|highbay","High-bay 150 W (18,000 lm)"],["24000|200|highbay","High-bay 200 W (24,000 lm)"]],"3600|36|panel36")}
+    ${F.n("hrs","Hours on per day",10)}${F.n("tariff","Tariff ₹ per unit",9)}
+    ${F.n("oldw","Old fitting watts (optional)","",'placeholder="e.g. 400 for metal halide"')}</div></div>`; },
+  calc(v){
+    if (!v.len || !v.wid) return res("Fittings needed", "—", "", [], "Enter the room size.");
+    const [lm, w] = String(v.fit).split("|").map(Number);
+    const m2 = v.len * v.wid * 0.0929, need = m2 * Number(v.use) / 0.6, n = Math.max(1, Math.ceil(need / lm));
+    const kw = n * w / 1000, yr = kw * (v.hrs || 0) * 365, cost = yr * (v.tariff || 0);
+    const grid = [["Area", fmt(v.len * v.wid, 0) + " sq ft (" + fmt(m2, 0) + " m²)"], ["Lumens needed", fmt(need, 0) + " lm"], ["Total load", fmt(kw, 2) + " kW"], ["Power use / year", fmt(yr, 0) + " units"], ["Running cost / year", inrS(cost)], ["Watts per sq ft", fmt(n * w / (v.len * v.wid), 2)]];
+    if (v.oldw) { const save = (v.oldw - w) * n / 1000 * (v.hrs || 0) * 365 * (v.tariff || 0); grid.push(["Saving vs old (same count)", inrS(save) + " / yr"]); }
+    return res("Fittings needed", n, "fittings", grid, "Uses 60% for losses (dirt, walls, ageing). For sheds, high-bay spacing should be about equal to the mounting height.")
+      + howBlock(`Lumens = area m² × lux ÷ 0.6 = ${fmt(m2,1)} × ${v.use} ÷ 0.6 = ${fmt(need,0)}\nFittings = lumens ÷ ${lm} lm each → ${n}`);
+  }
+},
+cctv: {
+  form(){ return `<div class="block"><div class="grid2">${F.n("cams","Number of cameras",8)}${F.sel("mp","Resolution",[["2","2 MP (1080p)"],["4","4 MP"],["5","5 MP"],["8","8 MP (4K)"]],"2")}
+    ${F.n("days","Days of recording",30)}${F.n("hrs","Hours recorded per day",24)}
+    ${F.n("run","Longest cable run (m)",60)}</div></div>`; },
+  calc(v){
+    if (!v.cams) return res("Storage needed", "—", "", [], "Enter the number of cameras.");
+    const mbps = {2: 2, 4: 3.5, 5: 4.5, 8: 7}[v.mp] || 2;
+    const tb = v.cams * mbps * (v.days || 0) * (v.hrs || 24) / 24 * 0.0108;
+    const disk = nextUp(tb * 1.1, [1, 2, 4, 6, 8, 10, 12, 16, 20, 24, 32]);
+    const ch = nextUp(v.cams, [4, 8, 16, 32, 64]), poe = v.cams * 7;
+    const cam = rowPrice("cctv", v.mp == 2 ? "2 MP" : "4-5 MP"), nvr = rowPrice("cctv", "NVR"), inst = rowPrice("cctv", "Installation per camera");
+    const budget = cam && nvr ? v.cams * priceOf(cam) + priceOf(nvr) * Math.max(1, ch / 8) + v.cams * priceOf(inst) + disk / 2 * priceOf(rowPrice("cctv", "hard disk")) : null;
+    return res("Storage needed", fmt(tb, 1), "TB", [["Suggested disk", disk + " TB"], ["NVR channels", ch + " channel"], ["PoE budget", "about " + poe + " W"], ["PoE switch", (v.cams <= 4 ? "4" : v.cams <= 8 ? "8" : v.cams <= 16 ? "16" : "24") + "-port PoE"], ["Cable run", v.run > 90 ? "Over 90 m: use fibre or a PoE extender" : "OK on Cat6"], ["Rough budget", budget ? inrS(budget) : "—"]],
+      "H.265 bitrates assumed (2 MP ≈ 2 Mbps). Motion-only recording can cut storage by half or more.")
+      + howBlock(`TB = cameras × Mbps × days × (hours ÷ 24) × 0.0108\n   = ${v.cams} × ${mbps} × ${v.days} × ${fmt((v.hrs||24)/24,2)} × 0.0108 = ${fmt(tb,2)} TB`);
+  }
+},
 margin: {
   form(){ return `<div class="block"><div class="grid2">${F.n("cost","Your cost ₹ (before GST)",40000)}${F.seg("mode","Set by",[["mk","Markup %"],["mg","Margin %"]],"mk")}
     ${F.n("pct","Percent",20)}${F.sel("gst","GST",[["18","18%"],["12","12%"],["5","5%"],["28","28%"],["0","0%"]],"18")}
@@ -714,6 +766,7 @@ function vSell(){
   html += `<div class="sec-h"><h3>Reasons to call this season</h3><span class="eyebrow">Nov 2026</span></div><div class="list">${(window.DRIVERS||[]).map(d => `<details class="li" style="display:block"><summary style="cursor:pointer;list-style:none"><b style="font-size:14.5px">${esc(d.t)}</b><br><span class="small muted">${esc(d.who)}</span></summary><p class="small" style="margin-top:6px">${esc(d.d)}</p></details>`).join("")}</div>`;
   html += `<div class="sec-h"><h3>Follow up today</h3><a class="small" href="#leads">All leads</a></div>`;
   html += due.length ? `<div class="list">${due.map(leadLi).join("")}</div>` : `<div class="empty"><b>Nothing due</b>Leads with a follow-up date of today or earlier show here.</div>`;
+  html += `<div class="sec-h"><h3>Guides</h3></div><div class="list">${["gst"].map(id => L.find(l => l.id === id)).filter(Boolean).map(l => lessonCard(l, "")).join("")}</div>`;
   html += `<div class="sec-h"><h3>Meeting prep</h3></div><div class="list">${PB.map(b => `<a class="li" href="#prep-${b.id}">${svg("users")}<span class="grow"><b>${esc(b.name)}</b><span>${esc(b.cares)}</span></span>${svg("chev")}</a>`).join("")}</div>`;
   html += `<div class="sec-h"><h3>Recent quotes</h3>${quotes.length?`<a class="small" href="#quotes">All quotes</a>`:""}</div>`;
   html += quotes.length ? `<div class="list">${quotes.slice(0,4).map(quoteLi).join("")}</div>` : `<div class="empty"><b>No quotes yet</b>Build one from your price list and send it on WhatsApp.</div>`;
@@ -1126,6 +1179,7 @@ function vSettings(){
       <div id="gbackups"></div>`
       : `<p class="small">Connect to put follow-ups, site visits and payment reminders in your Google Calendar, see today's meetings on the Today screen, and back up to Google Drive automatically.</p><div class="btnbar" style="margin-top:0"><button class="btn pri" data-act="gconnect">Connect Google</button></div>`}
   </div>` : ""}
+  ${ctSettingsBlock()}
   <div class="sec-h"><h3>Weekly targets</h3></div>
   <form class="block" id="tgtform" onsubmit="return false"><div class="grid3">${F.n("meet", "Meetings", t.meet)}${F.n("prop", "Proposals", t.prop)}${F.n("order", "Orders", t.order)}</div><button class="btn" data-act="savetargets" style="margin-top:10px">${svg("check")} Save targets</button></form>
   <div class="sec-h"><h3>My details on quotes</h3></div><form class="block stack" id="setform" onsubmit="return false"><div class="grid2">
@@ -1487,6 +1541,178 @@ document.addEventListener("change", e => {
 });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "visible") return; if (G.on() && G.pendingCount()) G.flush(false); if (Cal.on() && Cal.pending()) Cal.flush(false); if (cur === "today") loadTodayEvents(); });
 
+/* ===================== CHEMOTECH CATALOGUE (passcode-locked) ===================== */
+const CT_KEY = "mt-ckey";
+const CT = {
+  data: null, status: "locked", msg: "", busy: false,
+  ready(){ return !!this.data; },
+  b64d(s){ return Uint8Array.from(atob(s), c => c.charCodeAt(0)); },
+  b64e(u){ let s = ""; new Uint8Array(u).forEach(c => s += String.fromCharCode(c)); return btoa(s); },
+  async file(){ const r = await fetch("data/chemotech.enc.json?v=" + BUILD, {cache: "no-cache"}); if (!r.ok) throw new Error("fetch"); return r.json(); },
+  async open(key, e){ const pt = await crypto.subtle.decrypt({name: "AES-GCM", iv: this.b64d(e.iv)}, key, this.b64d(e.data)); return JSON.parse(new TextDecoder().decode(pt)); },
+  async unlock(pass){
+    if (!window.crypto || !crypto.subtle){ this.msg = "This browser can't open the locked catalogue."; return false; }
+    this.busy = true;
+    try {
+      const e = await this.file();
+      const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass.trim().normalize("NFKC")), "PBKDF2", false, ["deriveKey"]);
+      const key = await crypto.subtle.deriveKey({name: "PBKDF2", salt: this.b64d(e.salt), iterations: e.iter, hash: "SHA-256"}, base, {name: "AES-GCM", length: 256}, true, ["decrypt"]);
+      this.data = await this.open(key, e);
+      try { localStorage.setItem(CT_KEY, this.b64e(await crypto.subtle.exportKey("raw", key))); } catch(x){}
+      this.status = "ready"; this.msg = ""; return true;
+    } catch(x){ this.msg = x && x.message === "fetch" ? "Couldn't load the catalogue. Connect to the internet once and try again." : "That passcode didn't work. Check it and try again."; return false; }
+    finally { this.busy = false; }
+  },
+  async auto(){
+    let k = null; try { k = localStorage.getItem(CT_KEY); } catch(x){}
+    if (!k || !window.crypto || !crypto.subtle) return;
+    try {
+      const key = await crypto.subtle.importKey("raw", this.b64d(k), "AES-GCM", false, ["decrypt"]);
+      this.data = await this.open(key, await this.file()); this.status = "ready";
+    } catch(x){ this.status = "locked"; this.msg = "The catalogue was updated. Enter the passcode once more."; }
+    if (/^(chemotech|c-|products|p-|settings|learn)/.test(cur)) rerender();
+  },
+  lock(){ this.data = null; this.status = "locked"; this.msg = ""; try { localStorage.removeItem(CT_KEY); } catch(x){} }
+};
+const ctItem = no => CT.data && CT.data.items.find(x => x.no === no);
+const ctNorm = s => String(s || "").toLowerCase().replace(/[^a-z0-9&+.\/ ]+/g, " ");
+function ctSearch(q){
+  const terms = ctNorm(q).split(/\s+/).filter(Boolean); if (!terms.length || !CT.data) return [];
+  const out = [];
+  for (const x of CT.data.items){
+    const head = ctNorm([x.no, x.name, x.desc, x.use, x.buyers, x.group, x.main.join(" ")].join(" "));
+    const vars = x.variants.filter(v => { const t = ctNorm(v.v + " " + v.m.join(" ")); return terms.every(w => (head + " " + t).includes(w)) && terms.some(w => t.includes(w)); });
+    const all = terms.every(w => (head + " " + ctNorm(x.variants.map(v => v.v + " " + v.m.join(" ")).join(" "))).includes(w));
+    if (!all) continue;
+    let score = terms.reduce((s, w) => s + (ctNorm(x.name).includes(w) ? 5 : 0) + (x.no === w.padStart(2, "0") ? 8 : 0) + (head.includes(w) ? 2 : 0), 0) + vars.length;
+    out.push({x, vars, score});
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+const hl = (s, q) => {
+  const terms = ctNorm(q).split(/\s+/).filter(w => w.length > 1).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!terms.length) return esc(s);
+  const re = new RegExp("(" + terms.join("|") + ")", "ig");
+  return String(s || "").split(re).map((part, i) => i % 2 ? "<mark>" + esc(part) + "</mark>" : esc(part)).join("");
+};
+function ctRow(r){
+  const x = r.x || r, vars = r.vars || [], q = ui.cq || "";
+  const inMaya = x.maya.some(id => byId[id] && byId[id].maya);
+  return `<a class="li" href="#c-${x.no}"><span class="cno mono">${x.no}</span><span class="grow"><b>${hl(x.name, q)}</b>
+    <span>${vars.length && q ? vars.slice(0, 3).map(v => hl(v.v || x.name, q) + (v.m.length ? " · " + hl(v.m.slice(0, 4).join(", "), q) : "")).join("<br>") + (vars.length > 3 ? `<br>+${vars.length - 3} more` : "") : esc(x.desc)}</span></span>
+    <span class="row" style="flex-direction:column;align-items:flex-end;gap:4px;flex:none">${inMaya ? `<span class="pill good">Maya</span>` : ""}<span class="small muted mono">${x.variants.length} var</span></span></a>`;
+}
+function ctLockForm(){
+  return `<div class="block stack" style="max-width:520px;margin:8px auto 0">
+    <span class="ico" style="width:48px;height:48px;background:var(--copper-soft);color:var(--copper)">${svg("lock")}</span>
+    <h2 style="font-size:20px">Chemotech catalogue is locked</h2>
+    <p class="small">It holds Chemotech's internal product and make list, team and registrations, so it's stored encrypted. Enter the passcode once on this phone.</p>
+    ${CT.msg ? `<p class="small" style="color:var(--danger)">${esc(CT.msg)}</p>` : ""}
+    <form id="ctform" class="stack" onsubmit="return false"><div class="field"><label for="ct-pass">Passcode</label>
+      <input class="inp mono" id="ct-pass" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" placeholder="word-word-word-1234"></div>
+      <label class="row small" style="gap:8px"><input type="checkbox" id="ct-show" style="width:18px;height:18px"> Show passcode</label>
+      <button class="btn pri" data-act="ctunlock" ${CT.busy ? "disabled" : ""}>${svg("lock")} ${CT.busy ? "Opening…" : "Unlock"}</button></form></div>`;
+}
+function vChemotech(){
+  setHeader("Catalogue", "Chemotech");
+  if (!CT.ready()) return ctLockForm();
+  const d = CT.data, g = ui.cgroup || "all";
+  let html = `<div class="search" style="margin-bottom:6px">${svg("search")}<input id="cq" type="search" placeholder="Search product, variant, make or number" value="${esc(ui.cq || "")}" autocomplete="off" aria-label="Search Chemotech catalogue"></div>
+    <div class="chips">${[["all", "All"], ...d.groups.map(x => [x, x])].map(([v, l]) => `<button class="chip ${g === v ? "on" : ""}" data-act="cgroup" data-v="${esc(v)}">${esc(l)}</button>`).join("")}</div>
+    <div id="clist">${ctList()}</div>`;
+  return html;
+}
+function ctList(){
+  const d = CT.data, q = (ui.cq || "").trim(), g = ui.cgroup || "all";
+  if (q){
+    const rs = ctSearch(q).filter(r => g === "all" || r.x.group === g);
+    const vn = rs.reduce((s, r) => s + r.vars.length, 0);
+    return `<div class="sec-h"><span class="eyebrow">${rs.length} product${rs.length === 1 ? "" : "s"}${vn ? ", " + vn + " matching variants" : ""}</span></div>` +
+      (rs.length ? `<div class="list">${rs.map(ctRow).join("")}</div>` : `<div class="empty"><b>Nothing found</b>Try a product ("RCCB"), a make ("Polycab"), or a number ("24").</div>`);
+  }
+  let html = `<a class="li list" href="#c-about" style="border:1px solid var(--line);border-radius:12px;margin-top:10px">${svg("factory")}<span class="grow"><b>About Chemotech International</b><span>Offices, contacts, licences, team, clients, makes</span></span>${svg("chev")}</a>`;
+  const tot = d.items.reduce((s, x) => s + x.variants.length, 0);
+  html += `<p class="small muted" style="margin:12px 0 4px">${d.items.length} products · ${tot} variants · updated ${esc(d.updated)}. <span class="pill good" style="vertical-align:1px">Maya</span> = also in Maya Traders' own list.</p>`;
+  for (const grp of d.groups){
+    if (g !== "all" && g !== grp) continue;
+    const xs = d.items.filter(x => x.group === grp);
+    html += `<div class="sec-h"><h3>${esc(grp)}</h3><span class="small muted mono">${xs.length}</span></div><div class="list">${xs.map(ctRow).join("")}</div>`;
+  }
+  return html;
+}
+function vCItem(no){
+  if (!CT.ready()){ setHeader("Catalogue", "Chemotech", "#chemotech"); return ctLockForm(); }
+  const x = ctItem(no); if (!x) return `<div class="empty"><b>Product not found</b></div>`;
+  setHeader(x.group, x.name, "#chemotech");
+  ui.fromC = no;
+  const q = ui.cq || "", links = x.maya.map(id => byId[id]).filter(Boolean);
+  const makes = [...new Set(x.variants.flatMap(v => v.m))];
+  return `<div class="plate"><i class="s1"></i><i class="s2"></i>
+    <div class="hd"><span class="cno mono" style="width:52px;height:52px;font-size:17px">${x.no}</span><div style="min-width:0"><h2>${esc(x.name)}</h2><p class="tag">${esc(x.desc)}</p></div></div>
+    <dl class="kv"><div><dt>Group</dt><dd>${esc(x.group)}</dd></div><div><dt>Variants</dt><dd class="mono">${x.variants.length}</dd></div><div><dt>Makes</dt><dd class="mono">${makes.length}</dd></div></dl></div>
+  <div class="block" style="margin-top:12px"><h3>What it's for</h3><p class="lead-p">${esc(x.use)}</p><div class="where" style="margin-top:10px"><div><b>Buyers</b><span>${esc(x.buyers)}</span></div></div></div>
+  ${links.length ? `<div class="block"><h3>Learn & sell</h3><div class="list" style="border:0">${links.map(p => `<a class="li" href="#p-${p.id}" style="padding-inline:0"><span class="ico" style="width:38px;height:38px">${svg(p.icon)}</span><span class="grow"><b>${esc(p.name)}</b><span>${p.maya ? "In Maya Traders' list: lessons, sizing, pitch, prices" : "Chemotech guide: how it works and who buys"}</span></span>${svg("chev")}</a>`).join("")}</div></div>` : ""}
+  <div class="block"><h3>Main makes</h3><div class="brands">${x.main.map(m => `<span>${esc(m)}</span>`).join("")}</div></div>
+  <div class="block"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Variants & makes</h3><span class="small muted mono">${x.variants.length}</span></div>
+    <div class="vlist">${x.variants.map(v => `<div class="vrow"><b>${hl(v.v || x.name, q)}</b><div class="brands" style="margin-top:6px">${v.m.map(m => `<span>${hl(m, q)}</span>`).join("")}</div></div>`).join("")}</div>
+    ${x.note ? `<p class="src" style="background:var(--surface-2)">${esc(x.note)}</p>` : ""}</div>
+  <div class="btnbar"><button class="btn" data-act="copy" data-text="${esc(x.no + ". " + x.name + " — " + x.desc + "\n" + x.variants.map(v => "• " + (v.v || x.name) + ": " + v.m.join(", ")).join("\n"))}">${svg("copy")} Copy details</button>
+    <a class="btn" href="#lead-new" data-act="newleadc" data-v="${x.no}">${svg("users")} Add a lead</a></div>
+  <div class="btnbar">${CT.data.items.some(y => y.no === String(+no - 1).padStart(2, "0")) ? `<a class="btn sm ghost" href="#c-${String(+no - 1).padStart(2, "0")}">‹ ${esc(ctItem(String(+no - 1).padStart(2, "0")).name)}</a>` : ""}
+    ${CT.data.items.some(y => y.no === String(+no + 1).padStart(2, "0")) ? `<a class="btn sm ghost" href="#c-${String(+no + 1).padStart(2, "0")}">${esc(ctItem(String(+no + 1).padStart(2, "0")).name)} ›</a>` : ""}</div>`;
+}
+function vCAbout(){
+  if (!CT.ready()){ setHeader("Catalogue", "Chemotech", "#chemotech"); return ctLockForm(); }
+  const c = CT.data.company;
+  setHeader("Chemotech", "About Chemotech", "#chemotech");
+  const tel = p => { const n = p.replace(/\(.*\)/, "").replace(/[^\d+]/g, ""); return `<a class="mono" href="tel:${n}">${esc(p)}</a>`; };
+  return `<div class="block"><h2 style="font-size:20px">${esc(c.name)}</h2><p class="small muted" style="margin-top:2px">${esc(c.tagline)} · ${esc(c.type)} · est. ${esc(c.established)} · ${esc(c.countries)}</p>
+    <p style="margin-top:10px">${esc(c.about)}</p><p class="small" style="margin-top:8px"><b>Partners:</b> ${c.partners.map(esc).join(" · ")}</p></div>
+  <div class="sec-h"><h3>Offices</h3></div>
+  ${c.offices.map(o => `<div class="block"><h3>${esc(o.name)}</h3><p class="small">${esc(o.address)}</p>
+    <div class="stack" style="gap:6px;margin-top:10px">${o.phones.map(p => `<div class="row" style="justify-content:space-between">${tel(p)}<button class="btn sm ghost" data-act="copy" data-text="${esc(p.replace(/\s*\(.*\)/, ""))}">Copy</button></div>`).join("")}
+    ${o.emails.map(e => `<div class="row" style="justify-content:space-between"><span class="small" style="user-select:all;word-break:break-all">${esc(e)}</span><button class="btn sm ghost" data-act="copy" data-text="${esc(e)}">Copy</button></div>`).join("")}</div>
+    <p class="small mono" style="margin-top:8px">GSTIN ${esc(o.gstin)}</p></div>`).join("")}
+  <div class="sec-h"><h3>Licences & registrations</h3></div>
+  <div class="block"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Registration</th><th>Number</th><th>Valid</th></tr></thead><tbody>
+    ${c.registrations.map(r => `<tr><td>${esc(r[0])}</td><td class="mono" style="user-select:all">${esc(r[1])}</td><td class="small">${esc(r[2])}</td></tr>`).join("")}</tbody></table></div>
+    <div class="btnbar"><button class="btn sm" data-act="copy" data-text="${esc(c.registrations.map(r => r[0] + ": " + r[1] + " (" + r[2] + ")").join("\n"))}">${svg("copy")} Copy all</button></div></div>
+  <div class="sec-h"><h3>Team</h3></div>
+  <div class="list">${c.team.map(t => `<div class="li"><span class="cno mono" style="font-size:11px">${esc(t[2].replace(" yrs", "").replace("yrs", ""))}<small style="font-size:8px;display:block">yrs</small></span><span class="grow"><b>${esc(t[0])}</b><span>${esc(t[1])} · ${esc(t[3])}</span></span></div>`).join("")}</div>
+  <div class="sec-h"><h3>Services with every product</h3></div><div class="block"><ol class="steps">${c.services.map(s => `<li><span>${esc(s)}</span></li>`).join("")}</ol></div>
+  <div class="sec-h"><h3>Key clients</h3></div><div class="block"><div class="brands">${c.clients.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>
+  <div class="sec-h"><h3>Reference projects</h3></div><div class="block">${c.references.map(r => `<div class="term"><b>${esc(r[0])}</b>${esc(r[1])}</div>`).join("")}</div>
+  <div class="sec-h"><h3>Industries served</h3></div><div class="block"><div class="brands">${c.industries.map(x => `<span>${esc(x)}</span>`).join("")}</div></div>
+  <div class="sec-h"><h3>Business partners (makes)</h3></div><div class="block"><div class="brands">${c.makes.map(x => `<span>${esc(x)}</span>`).join("")}</div><p class="small muted" style="margin-top:8px">+ 90 other makes across electrical, power, automation, water, building and ICT.</p></div>
+  <div class="sec-h"><h3>Why work with us</h3></div><div class="block"><ul class="bul">${c.why.map(s => `<li>${esc(s)}</li>`).join("")}</ul></div>
+  <p class="small muted" style="margin-top:12px">Source: ${esc(CT.data.source)}. Bank details are left out on purpose.</p>`;
+}
+function ctLinksBlock(p){
+  if (!CT.ready()) return `<div class="sec-h"><h3>In the Chemotech catalogue</h3></div><a class="li list" href="#chemotech" style="border:1px solid var(--line);border-radius:12px">${svg("lock")}<span class="grow"><b>Unlock the Chemotech catalogue</b><span>See every variant and make for this product</span></span>${svg("chev")}</a>`;
+  const xs = CT.data.items.filter(x => x.maya.includes(p.id)); if (!xs.length) return "";
+  return `<div class="sec-h"><h3>In the Chemotech catalogue</h3><span class="small muted">${xs.reduce((s, x) => s + x.variants.length, 0)} variants</span></div><div class="list">${xs.map(x => ctRow(x)).join("")}</div>`;
+}
+function ctSettingsBlock(){
+  return `<div class="sec-h"><h3>Chemotech catalogue</h3>${CT.ready() ? `<span class="pill good">Unlocked</span>` : `<span class="pill">Locked</span>`}</div>
+  <div class="block stack">${CT.ready() ? `<p class="small">Unlocked on this phone (updated ${esc(CT.data.updated)}). Lock it if you hand your phone to someone, or before selling or giving it away.</p><div class="btnbar" style="margin-top:0"><button class="btn ghost danger" data-act="ctlock">${svg("lock")} Lock on this phone</button></div>`
+    : `<p class="small">Locked. Open the Chemotech tab and enter the passcode to unlock it.</p><div class="btnbar" style="margin-top:0"><a class="btn" href="#chemotech">Open Chemotech</a></div>`}</div>`;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const a = b.dataset.act;
+  if (a === "ctunlock"){ const v = ($("#ct-pass") || {}).value || ""; if (!v.trim()){ toast("Enter the passcode"); return; }
+    b.disabled = true; b.textContent = "Opening…"; CT.unlock(v).then(ok => { if (ok) toast("Chemotech catalogue unlocked"); rerender(); }); }
+  else if (a === "ctlock"){ CT.lock(); toast("Catalogue locked on this phone"); rerender(); }
+  else if (a === "cgroup"){ ui.cgroup = b.dataset.v; $$(".chips .chip").forEach(c => c.classList.toggle("on", c === b)); const l = $("#clist"); if (l) l.innerHTML = ctList(); }
+  else if (a === "ctq"){ ui.cq = b.dataset.v; ui.cgroup = "all"; }
+  else if (a === "newleadc"){ const x = ctItem(b.dataset.v); ui.newLead = {id: "", stage: "New", type: "builder", products: (x && x.maya.filter(id => byId[id] && byId[id].maya)) || [], notes: x ? "Interested in: " + x.name : ""}; }
+});
+document.addEventListener("input", e => {
+  if (e.target.id === "cq"){ ui.cq = e.target.value; clearTimeout(ui.cqT); ui.cqT = setTimeout(() => { const l = $("#clist"); if (l) l.innerHTML = ctList(); }, 120); }
+});
+document.addEventListener("change", e => { if (e.target.id === "ct-show"){ const p = $("#ct-pass"); if (p) p.type = e.target.checked ? "text" : "password"; } });
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "ct-pass"){ e.preventDefault(); const b = $('[data-act="ctunlock"]'); if (b) b.click(); } });
+
 /* ---------- after render hooks ---------- */
 function after(h){
   if (h.startsWith("t-")) runCalc();
@@ -1502,6 +1728,7 @@ document.addEventListener("click", e => {
   const delGuard = key => { if (ui.del === key){ ui.del = null; return true; } ui.del = key; setTimeout(() => { if (ui.del === key){ ui.del = null; } }, 3000); return false; };
   switch(a){
     case "pfilter": ui.pfilter = b.dataset.v; rerender(); break;
+    case "lfrom": ui.lessonFrom = b.dataset.v || ""; ui.quizAns = null; break;
     case "ptab": ui.ptab[id] = b.dataset.v; $$(".seg button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", x===b); }); $("#ppanel").innerHTML = pPanel(byId[id], b.dataset.v); hydratePhotos(); break;
     case "gotoprices": ui.ptab[id] = "prices"; break;
     case "copy": copyText(b.dataset.text); break;
@@ -1582,6 +1809,7 @@ $("#back").addEventListener("click", () => { const to = $("#back").dataset.to; i
 /* ---------- boot ---------- */
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); ui.installEvt = e; if (cur === "notes") rerender(); });
 route();
+CT.auto();
 Store.init().then(() => { rerender(); setSync("ok"); if (G.on()) setTimeout(() => G.flush(false), 1500); if (Cal.on()) setTimeout(() => Cal.flush(false), 1200); });
 if ("serviceWorker" in navigator && location.protocol === "https:"){
   navigator.serviceWorker.register("sw.js").catch(() => {});

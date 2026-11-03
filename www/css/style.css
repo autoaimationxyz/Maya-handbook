@@ -289,3 +289,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .banner b{color:var(--warn)}
 .hr{height:1px;background:var(--line);margin:14px 0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* Chemotech catalogue */
+.cno{width:38px;height:38px;flex:none;border-radius:9px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-size:13px;font-weight:600;line-height:1;text-align:center}
+.vlist{display:flex;flex-direction:column;margin-top:6px}
+.vrow{padding:11px 0;border-top:1px solid var(--line)}
+.vrow:first-child{border-top:0}
+.vrow b{font-size:14.5px;line-height:1.35}
+mark{background:var(--warn-soft);color:inherit;border-radius:3px;padding:0 1px}
+.li .grow span mark{font-weight:600}

@@ -6,3 +6,5 @@ capacitor.config.json
 *.keystore
 *.apk
 .DS_Store
+private/
+catalogue*.json

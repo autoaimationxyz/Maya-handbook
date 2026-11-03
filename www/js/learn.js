@@ -348,3 +348,62 @@ window.DRIVERS = [
   {t:"Copper prices rising", d:"Cable makers revise lists several times a year. Quote short validity, buy only against PO + advance.", who:"Caution for cables"},
   {t:"Gurugram approvals slowed", d:"Stilt-plus-four stayed (Apr 2026); DTCP froze fresh approvals from 21 Jul 2026. Focus on stilt-plus-three, Delhi floors, farmhouses, renovations.", who:"Caution for builder credit"}
 ];
+
+// Added Nov 2026: lessons for the new products
+window.LESSONS.push(
+{
+  id: "lighting", title: "Lighting basics: lumens, lux, colour", mins: 4,
+  intro: "Sell light by what people see, not by watts.",
+  body: [
+    ["Lumens (lm)", "Total light a lamp gives. A 15 W LED panel gives about 1,500 lm; a 150 W high-bay about 18,000-22,000 lm."],
+    ["Efficacy (lm/W)", "Light per watt. Good LEDs give 100-150 lm/W; cheap ones 70-90. This is what separates a good LED from a bad one."],
+    ["Lux", "Light falling on a surface. Desks need about 300-500 lux, corridors 100, warehouses 150-200, factory work areas 300-500."],
+    ["Colour temperature (K)", "3000 K warm white (homes, hotels), 4000 K neutral (offices, shops), 5700-6500 K cool white (factories, streets)."],
+    ["CRI", "How true colours look. 80+ is fine for most places; 90+ for showrooms, clinics and photo studios."],
+    ["IP rating", "First digit = dust, second = water. IP20 indoor only; IP65 dust-tight and jet-proof for outdoor and sheds."]
+  ],
+  quiz: [
+    {q: "Which number tells you how efficient an LED is?", o: ["Watts", "Lumens per watt", "Colour temperature", "IP rating"], a: 1, why: "lm/W is light output per unit of power."},
+    {q: "Best colour for a hotel room?", o: ["3000 K", "6500 K", "10000 K", "Any"], a: 0, why: "Warm white feels relaxing."},
+    {q: "An outdoor flood light should be at least…", o: ["IP20", "IP44", "IP65", "IP00"], a: 2, why: "IP65 is dust-tight and handles rain jets."}
+  ]
+},
+{
+  id: "cctv", title: "CCTV basics: cameras, NVR, storage", mins: 4,
+  intro: "Plan a system you can quote in ten minutes.",
+  body: [
+    ["IP vs analogue", "IP cameras send digital video over network cable to an NVR and can be powered by the same cable (PoE). Analogue/HD cameras use coaxial cable to a DVR and are cheaper for small sites."],
+    ["Resolution", "2 MP = 1080p (enough for most homes and shops). 4-5 MP for wider areas and faces at a distance. 8 MP = 4K for large campuses."],
+    ["Lens", "2.8 mm = wide view (rooms, lobbies). 3.6 mm = standard. 6 mm+ = long, narrow views (gates, driveways)."],
+    ["Storage", "TB ≈ cameras × Mbps × days × 0.0108 (for 24 h recording). A 2 MP H.265 camera is about 2 Mbps, so 8 cameras for 30 days ≈ 5 TB."],
+    ["PoE", "Power over Ethernet: each camera takes 5-8 W. One Cat6 run up to about 90-100 m."],
+    ["Night view", "IR gives black-and-white night video; colour-night models add a white light. Always test at night before handover."]
+  ],
+  quiz: [
+    {q: "Which camera type can be powered through its network cable?", o: ["Analogue", "IP with PoE", "Wi-Fi only", "None"], a: 1, why: "PoE carries power and data on one Cat6 cable."},
+    {q: "8 cameras at 2 Mbps for 30 days need roughly…", o: ["500 GB", "2 TB", "5-6 TB", "20 TB"], a: 2, why: "8 × 2 × 30 × 0.0108 ≈ 5.2 TB."},
+    {q: "Best lens for a long driveway?", o: ["2.8 mm", "3.6 mm", "6 mm or more", "Fisheye"], a: 2, why: "Longer focal length sees further with a narrower view."}
+  ]
+});
+
+// Which lessons belong inside each product's Learn tab (first = most relevant)
+window.LESSON_FOR = {
+  cables: ["basics", "cables", "protection"],
+  switchgear: ["protection", "basics", "phase", "earthing"],
+  earthing: ["earthing", "powerquality", "protection"],
+  stabilizer: ["powerquality", "kva", "phase", "bill"],
+  ups: ["kva", "batteries", "powerquality"],
+  lighting: ["lighting", "basics"],
+  cctv: ["cctv", "earthing"],
+  solar: ["solar101", "bill", "batteries"],
+  ev: ["phase", "protection", "bill", "earthing"],
+  vfd: ["motors", "kva", "powerquality"],
+  plc: ["automation101", "motors"],
+  ledwall: ["basics", "powerquality"],
+  bms: ["automation101", "bill"],
+  scada: ["automation101"],
+  damgate: ["automation101", "motors"],
+  wtp: ["motors"],
+  steam: [],
+  puf: []
+};

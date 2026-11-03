@@ -8,7 +8,9 @@ This repo is Maya Traders' personal sales handbook app. The owner is a BTech EEE
 2. Content is plain JS data:
    - Products: `www/js/products1.js` and `products2.js`. Each product has `what`, `why`, `how`, `types`, `sizing`, `specs`, `brands`, `buyers`, `where`, `wayIn`, `ask`, `pitch`, `objections`, `mistakes`, `upsell`, `prices` (INR, before GST, `low`/`high`), `priceNote` and `calc`.
    - A new product also needs its id in `ORDER` in `www/js/app.js`, and an icon key that exists in `IC`.
-   - Lessons, playbooks, surveys and market drivers: `www/js/learn.js`.
+   - Lessons, playbooks, surveys and market drivers: `www/js/learn.js`. `LESSON_FOR` decides which lessons show inside each product's Learn tab (there is no separate Learn tab).
+   - Maya Traders' own list is everything in `ORDER` minus `GUIDES` (wtp, steam, scada, damgate, puf). Those are Chemotech-only guides, opened from the Chemotech tab.
+   - **Chemotech catalogue** (Chemotech tab): `www/data/chemotech.enc.json`, AES-GCM encrypted. To update it, edit the private plain `catalogue.json` (kept in the owner's Claude project as `claude/chemotech-catalogue.json`, NEVER in this repo), then run `MT_PASSCODE='<passcode from the project doc>' node scripts/encrypt-catalogue.js catalogue.json`. The script keeps the salt, so phones stay unlocked. Never commit plaintext Chemotech data, phone numbers, PAN/GST or bank details.
 3. Run `node --check` on every JS file you changed.
 4. Commit with a clear message and push to `main`. `pages.yml` republishes the site in about a minute, and the phone app picks it up on its next open.
 5. Only bump the APK (push to `package.json` or `assets/`, or run *Build Android app*) when the native shell changes.
