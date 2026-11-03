@@ -44,6 +44,8 @@ const IC = {
   bulb:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   factory:'<path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17z"/><path d="M7 17h2M12 17h2M17 17h2"/>',
   lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  find:'<circle cx="10" cy="10" r="6"/><path d="M20 20l-5.6-5.6M8 10h4M10 8v4"/>',
   back:'<path d="M15 18l-6-6 6-6"/>', chev:'<path d="M9 6l6 6-6 6"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
   copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
@@ -181,7 +183,7 @@ const margin = (c, s) => (c != null && s) ? (s - c) / s * 100 : null;
 /* ---------- router ---------- */
 let cur = "products";
 const ui = {ptab:{}, pfilter:"all", q:"", leadFilter:"open", quote:null, survey:null, upsRows:null, del:null};
-const TAB_OF = h => /^(c-|chemotech|learn)/.test(h) ? "chemotech" : /^(p-|products|pricebook|l-)/.test(h) ? "products" : /^(t-|tools)/.test(h) ? "tools" : /^(today|notes|settings|activity|expenses)$/.test(h) ? "today" : "sell";
+const TAB_OF = h => /^(c-|chemotech|learn)/.test(h) ? "chemotech" : /^(p-|products|pricebook|l-)/.test(h) ? "products" : /^(t-|tools|finder)/.test(h) ? "tools" : /^(today|notes|settings|activity|expenses)$/.test(h) ? "today" : "sell";
 const ROOT = {products:1, learn:1, tools:1, sell:1, notes:1};
 
 function setHeader(eyebrow, title, back){
@@ -213,6 +215,7 @@ function route(){
     else if (h.startsWith("c-")) html = vCItem(h.slice(2));
     else if (h.startsWith("l-")) html = vLesson(h.slice(2));
     else if (h === "tools") html = vTools();
+    else if (h === "finder") html = vFinder();
     else if (h.startsWith("t-")) html = vCalc(h.slice(2));
     else if (h === "sell") html = vSell();
     else if (h === "leads") html = vLeads();
@@ -247,7 +250,7 @@ function pItem(p){
     <span class="rng">${from}<br>${r0 ? esc(r0.unit) : ""}</span></a>`;
 }
 function vProducts(){
-  setHeader("Maya Traders", "Products");
+  setHeader("Maya Traders", "Maya");
   const q = ui.q.trim();
   let html = `<div class="search" style="margin-bottom:6px">${svg("search")}<input id="q" type="search" placeholder="Search products, lessons, tools, Chemotech" value="${esc(ui.q)}" autocomplete="off" aria-label="Search"></div>`;
 
@@ -265,7 +268,7 @@ function vProducts(){
     return html;
   }
   html += `<div class="sec-h"><span class="eyebrow">${MAYA_P().length} products, in selling order</span></div><div class="plist">${MAYA_P().map(pItem).join("")}</div>
-  <a class="li list" href="#chemotech" style="margin-top:12px;border:1px solid var(--line);border-radius:12px">${svg("factory")}<span class="grow"><b>Full Chemotech catalogue</b><span>56 products, 328 variants, all makes</span></span>${svg("chev")}</a>`;
+  <a class="li list" href="#chemotech" style="margin-top:12px;border:1px solid var(--line);border-radius:12px">${svg("factory")}<span class="grow"><b>Full Chemotech catalogue</b><span>56 products and 328 variants, each with learning, makes and photos</span></span>${svg("chev")}</a>`;
   html += `<div class="btnbar" style="margin-top:18px"><a class="btn" href="#pricebook">${svg("pct")} My price book</a></div>`;
   return html;
 }
@@ -284,12 +287,20 @@ function vProduct(id){
     <div><dt>Buyers</dt><dd>${esc(p.buyers.split(",")[0])}${p.buyers.includes(",")?" +":""}</dd></div>
     <div><dt>Market</dt><dd class="mono" style="font-size:12.5px">${isFinite(lo)?inrS(lo)+"–"+inrS(hi):"Project"}</dd></div></dl></div>`;
   if (!p.maya) html += `<div class="banner" style="margin-top:12px"><b>Chemotech product.</b> Not in Maya Traders' own list: it needs engineering and a long sales cycle. Learn it, then pass enquiries to the Chemotech team.</div>`;
-  html += `<div class="seg" role="tablist">${[["overview","Learn"],["sizing","Size it"],["sell","Sell it"],["prices","Prices"]].map(([k,l]) => `<button class="${tab===k?"on":""}" data-act="ptab" data-id="${id}" data-v="${k}" role="tab" aria-selected="${tab===k}">${l}</button>`).join("")}</div>`;
+  html += `<div class="seg" role="tablist">${[["overview","Learn"],["sizing","Size"],["sell","Sell"],["variants","Variants"],["prices","Prices"]].map(([k,l]) => `<button class="${tab===k?"on":""}" data-act="ptab" data-id="${id}" data-v="${k}" role="tab" aria-selected="${tab===k}">${l}</button>`).join("")}</div>`;
   html += `<div id="ppanel">${pPanel(p, tab)}</div>`;
   return html;
 }
+function pVariants(p){
+  if (!CT.ready()) return `<div class="block stack"><h3 style="margin:0">Every variant, with learning</h3><p class="small">Variants, use cases, specs, makes and photos come from the Chemotech catalogue. Unlock it once to see them here.</p><a class="btn pri" href="#chemotech">${svg("lock")} Unlock Chemotech catalogue</a></div>`;
+  const xs = CT.data.items.filter(x => x.maya.includes(p.id));
+  if (!xs.length) return `<div class="empty"><b>No catalogue variants linked</b>This product isn't in the Chemotech master list.</div>`;
+  return xs.map(x => `<div class="sec-h"><h3>${esc(x.name)}</h3><a class="small" href="#c-${x.no}">Full page</a></div><p class="small muted" style="margin:-4px 0 8px">${esc(x.desc)}</p><div class="vlist2">${x.variants.map((v, i) => variantCard(x, v, i, "")).join("")}</div>`).join("");
+}
+function pDiagram(p){ if (!CT.ready()) return ""; const x = CT.data.items.find(y => y.maya.includes(p.id) && y.dia); return x ? diagramSVG(x.dia) : ""; }
 function pPanel(p, tab){
-  if (tab === "overview") return `
+  if (tab === "variants") return pVariants(p);
+  if (tab === "overview") return `${pDiagram(p)}
     <div class="block"><h3>What it is</h3><p class="lead-p">${esc(p.what)}</p></div>
     <div class="block"><h3>Why customers buy it</h3><p>${esc(p.why)}</p></div>
     <div class="block"><h3>How it works</h3><ol class="steps">${p.how.map(s=>`<li><span>${esc(s)}</span></li>`).join("")}</ol></div>
@@ -441,8 +452,11 @@ const CALCS = [
 ];
 function vTools(){
   setHeader("Site & meeting calculators", "Tools");
-  return `<div class="tgrid">${CALCS.map(c=>`<a class="tcard" href="#t-${c.id}"><span class="ico">${svg(c.icon)}</span><b>${esc(c.name)}</b><span>${esc(c.desc)}</span></a>`).join("")}</div>
-  <p class="small muted" style="margin-top:14px">Calculators give good first estimates for a meeting. Final sizing for large or critical jobs should be checked by the supplier's engineer.</p>`;
+  const card = c => `<a class="tcard" href="#t-${c.id}"><span class="ico">${svg(c.icon)}</span><b>${esc(c.name)}</b><span>${esc(c.desc)}</span></a>`;
+  return `<a class="li list" href="#finder" style="border:1px solid var(--line);border-radius:12px">${svg("find")}<span class="grow"><b>Product finder</b><span>Pick the site and its problems: get the products to pitch</span></span>${svg("chev")}</a>
+  <div class="sec-h"><h3>For your Maya products</h3></div><div class="tgrid">${CALCS.filter(c => c.grp !== "c").map(card).join("")}</div>
+  <div class="sec-h"><h3>For Chemotech products</h3></div><div class="tgrid">${CALCS.filter(c => c.grp === "c").map(card).join("")}</div>
+  <p class="small muted" style="margin-top:14px">Calculators give good first estimates for a meeting. Final sizing for large or critical jobs should be checked by Chemotech's engineers.</p>`;
 }
 const F = {
   n:(name, label, val, extra="") => `<div class="field"><label for="f-${name}">${label}</label><input class="inp mono" id="f-${name}" name="${name}" inputmode="decimal" value="${val}" ${extra}></div>`,
@@ -751,6 +765,209 @@ function vCalc(id){
 }
 function runCalc(){ const f = $("#calcform"); if (!f) return; const id = f.dataset.calc; $("#calcout").innerHTML = CALC[id].calc(readForm(f)); }
 
+/* ===================== TOOLS: Chemotech calculators, product finder, catalogue quote ===================== */
+CALCS.push(
+  {id:"transformer", name:"Transformer size", desc:"Connected load → kVA, currents, incomer", icon:"factory", grp:"c"},
+  {id:"dg", name:"DG set size & fuel", desc:"Load + biggest motor → kVA, diesel use", icon:"ups", grp:"c"},
+  {id:"apfc", name:"APFC / capacitor kVAR", desc:"kW and PF → kVAR, steps, savings", icon:"pct", grp:"c"},
+  {id:"motor", name:"Motor current & starter", desc:"kW → full-load amps, starter, MCCB, cable", icon:"vfd", grp:"c"},
+  {id:"backup", name:"Inverter & battery backup", desc:"Load and hours → inverter VA and batteries", icon:"ups", grp:"c"},
+  {id:"fire", name:"Fire alarm planner", desc:"Floor area → detectors, call points, panel", icon:"bell", grp:"c"},
+  {id:"tray", name:"Cable tray width", desc:"Cables and size → tray width", icon:"cable", grp:"c"},
+  {id:"water", name:"STP & RO size", desc:"People or flow → STP KLD, RO LPH", icon:"water", grp:"c"}
+);
+CALCS.forEach(c => { if (!c.grp) c.grp = "m"; });
+const STD_TX = [63,100,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150];
+const STD_DG = [15,20,25,30,40,50,62.5,82.5,100,125,160,180,200,250,320,380,400,500,625,750,1010,1250,1500,2000];
+const STD_I = [16,20,25,32,40,50,63,80,100,125,160,200,250,320,400,500,630,800,1000,1250,1600,2000,2500,3200,4000,5000,6300];
+const tanOf = pf => Math.tan(Math.acos(Math.min(0.9999, Math.max(0.3, pf))));
+Object.assign(CALC, {
+transformer: {
+  form(){ return `<div class="block"><div class="grid2">${F.n("kw","Connected load (kW)",600)}${F.sel("df","Diversity factor",[["0.6","0.6 (offices, homes)"],["0.7","0.7 (mixed)"],["0.8","0.8 (factories)"],["0.9","0.9 (process, 24×7)"]],"0.7")}
+    ${F.sel("pf","Power factor",[["0.8","0.8"],["0.85","0.85"],["0.9","0.9"],["0.95","0.95 (with APFC)"]],"0.9")}${F.n("grow","Future growth (%)",20)}
+    ${F.n("load","Target loading (%)",80)}${F.seg("loc","Installed",[["out","Outdoor"],["in","Indoor / basement"]],"out")}</div></div>`; },
+  calc(v){
+    if (!v.kw) return res("Transformer size", "—", "", [], "Enter the connected load.");
+    const md = v.kw * (Number(v.df) || 0.7), kva0 = md / (Number(v.pf) || 0.9) * (1 + (v.grow || 0) / 100) / ((v.load || 80) / 100);
+    const kva = nextUp(kva0, STD_TX), iLT = kva * 1000 / (1.732 * 433), iHT = kva * 1000 / (1.732 * 11000);
+    return res("Recommended transformer", kva, "kVA", [["Maximum demand", fmt(md, 0) + " kW"], ["Calculated", fmt(kva0, 0) + " kVA"], ["LT full-load current", fmt(iLT, 0) + " A"], ["HT current (11 kV)", fmt(iHT, 1) + " A"],
+      ["LT incomer", (iLT > 800 ? "ACB " : "MCCB ") + nextUp(iLT * 1.0, STD_I) + " A"], ["Type", v.loc === "in" ? "Dry type (cast resin)" : "Oil type (ONAN)"]],
+      "Diversity accounts for loads not all running at once. Check the DISCOM's rules on transformer ownership and the sanctioned load." + (kva > 2500 ? " Above 2,500 kVA, consider two transformers." : ""))
+      + howBlock(`Max demand = ${v.kw} kW × ${v.df} = ${fmt(md,0)} kW\nkVA = MD ÷ PF ${v.pf} × (1 + ${v.grow||0}%) ÷ ${v.load||80}% loading = ${fmt(kva0,0)} → ${kva} kVA standard\nLT current = kVA × 1000 ÷ (1.732 × 433 V)`);
+  }
+},
+dg: {
+  form(){ return `<div class="block"><div class="grid2">${F.n("kw","Total running load (kW)",80)}${F.n("mkw","Biggest motor (kW)",15)}
+    ${F.sel("st","Its starting method",[["dol","DOL"],["sd","Star-delta"],["soft","Soft starter"],["vfd","VFD"]],"sd")}${F.n("hrs","Running hours per month",40)}
+    ${F.n("dp","Diesel price ₹/litre",90)}${F.seg("ph","Supply",[["3","3-phase"],["1","1-phase"]],"3")}</div></div>`; },
+  calc(v){
+    if (!v.kw) return res("DG set size", "—", "", [], "Enter the running load.");
+    const run = v.kw / 0.8 * 1.25, mult = {dol: 3.5, sd: 2, soft: 2, vfd: 1.4}[v.st] || 2, start = (v.mkw || 0) * mult / 0.8 + (v.kw - (v.mkw || 0)) / 0.8;
+    const need = Math.max(run, start * 0.75), list = v.ph === "1" ? STD_DG.filter(s => s <= 30) : STD_DG, kva = nextUp(need, list);
+    const loadPct = v.kw / (kva * 0.8) * 100, lph = v.kw * 0.25 + kva * 0.8 * 0.02, month = lph * (v.hrs || 0);
+    return res("Recommended DG set", kva, "kVA", [["Running kVA (+25%)", fmt(run, 0) + " kVA"], ["Motor starting need", fmt(start * 0.75, 0) + " kVA"], ["Load on DG", fmt(loadPct, 0) + "%"], ["Diesel use", "≈ " + fmt(lph, 1) + " L/hr"],
+      ["Diesel / month", fmt(month, 0) + " L · " + inrS(month * (v.dp || 0))], ["Per unit cost", "≈ " + inr(lph * (v.dp || 0) / Math.max(1, v.kw)) + " / kWh"]],
+      (loadPct < 30 ? "<b>Load is under 30%:</b> a smaller set or two sets would avoid wet-stacking. " : "") + "NCR: CAQM/GRAP restrict diesel DG use; check current rules, dual-fuel or emission-control retrofits. Compare the per-unit cost with solar + batteries.")
+      + howBlock(`Running kVA = ${v.kw} kW ÷ 0.8 × 1.25 = ${fmt(run,0)}\nStarting: motor ${v.mkw} kW × ${mult} (${v.st}) ÷ 0.8 + other load ÷ 0.8 = ${fmt(start,0)} kVA; DG handles ~1.33× briefly → ${fmt(start*0.75,0)}\nDiesel ≈ 0.25 L per kWh + idle losses`);
+  }
+},
+apfc: {
+  form(){ return `<div class="block"><div class="grid2">${F.n("kw","Maximum demand (kW)",300)}${F.n("pf1","Present power factor",0.8)}
+    ${F.n("pf2","Target power factor",0.99)}${F.n("rate","Demand charge ₹ per kVA / month",300)}</div>
+    <div class="stack" style="margin-top:10px">${F.chk("harm","Many VFDs, UPS or LED loads (harmonics)",true)}</div></div>`; },
+  calc(v){
+    if (!v.kw || !v.pf1) return res("Capacitor bank", "—", "", [], "Enter kW and present PF.");
+    const pf2 = Math.min(0.999, v.pf2 || 0.99), kvar = v.kw * (tanOf(v.pf1) - tanOf(pf2));
+    if (kvar <= 0) return res("Capacitor bank", "Not needed", "", [], "Present PF is already at or above the target.");
+    const size = Math.ceil(kvar * 1.1 / 25) * 25, kva1 = v.kw / v.pf1, kva2 = v.kw / pf2, save = (kva1 - kva2) * (v.rate || 0) * 12;
+    const steps = size <= 100 ? 6 : size <= 300 ? 8 : 12;
+    return res("APFC panel size", size, "kVAR", [["Calculated kVAR", fmt(kvar, 0)], ["Steps", steps + " steps (e.g. " + Math.round(size / steps / 5) * 5 + " kVAR each)"], ["kVA before → after", fmt(kva1, 0) + " → " + fmt(kva2, 0)], ["Current reduction", fmt((1 - kva2 / kva1) * 100, 0) + "%"],
+      ["Demand saving / year", inrS(save)], ["Type", v.harm ? "Detuned (7% reactor)" : "Standard capacitors"]],
+      "Penalty savings for low PF (or kVAh billing) come on top of the demand saving. Measure harmonics with a power quality analyser before final design.")
+      + howBlock(`kVAR = kW × (tan φ1 − tan φ2)\n    = ${v.kw} × (${fmt(tanOf(v.pf1),3)} − ${fmt(tanOf(pf2),3)}) = ${fmt(kvar,1)} → ${size} kVAR panel (+10%)`);
+  }
+},
+motor: {
+  form(){ return `<div class="block"><div class="grid2">${F.n("kw","Motor rating (kW)",22)}${F.n("v","Voltage (V)",415)}
+    ${F.n("pf","Power factor",0.86)}${F.n("eff","Efficiency (%)",92)}
+    ${F.sel("st","Starter",[["dol","DOL"],["sd","Star-delta"],["soft","Soft starter"],["vfd","VFD"]],"sd")}${F.n("len","Cable length (m)",40)}</div>
+    <p class="small muted" style="margin-top:8px">HP × 0.746 = kW. Use the nameplate current if you have it.</p></div>`; },
+  calc(v){
+    if (!v.kw) return res("Motor current", "—", "", [], "Enter the motor kW.");
+    const flc = v.kw * 1000 / (1.732 * (v.v || 415) * (v.pf || 0.86) * ((v.eff || 92) / 100));
+    const sm = {dol: 7, sd: 2.3, soft: 3, vfd: 1.5}[v.st] || 7, startI = flc * sm;
+    const ctr = v.st === "sd" ? flc * 0.58 : flc, ol = v.st === "sd" ? flc * 0.58 : flc;
+    const CU = [[1.5,13],[2.5,18],[4,24],[6,31],[10,42],[16,56],[25,73],[35,89],[50,108],[70,136],[95,164],[120,188],[150,216],[185,245],[240,286]];
+    const need = (v.st === "sd" ? flc * 0.58 : flc) * 1.25, cab = (CU.find(r => r[1] >= need) || CU[CU.length - 1])[0];
+    return res("Full-load current", fmt(flc, 1), "A", [["Starting current", "≈ " + fmt(startI, 0) + " A (" + sm + "×)"], ["Contactor (AC-3)", "≥ " + fmt(ctr, 0) + " A" + (v.st === "sd" ? " × 3 contactors" : "")], ["Overload setting", fmt(ol, 1) + " A"],
+      ["MCCB / MPCB", nextUp(flc * 1.25, STD_I) + " A"], ["Copper cable", cab + " sq mm" + (v.st === "sd" ? " × 2 runs (6-lead)" : "")], ["Motor power", fmt(v.kw / 0.746, 1) + " HP"]],
+      (v.len > 100 ? "<b>Long cable:</b> check voltage drop in the cable calculator. " : "") + (v.st === "vfd" ? "Size the VFD by this current; heavy-duty loads need one size up." : v.st === "dol" && v.kw > 7.5 ? "DOL above 7.5 kW causes big starting dips; consider star-delta, soft starter or VFD." : ""))
+      + howBlock(`FLC = kW × 1000 ÷ (1.732 × V × PF × efficiency)\n    = ${v.kw} × 1000 ÷ (1.732 × ${v.v} × ${v.pf} × ${(v.eff||92)/100}) = ${fmt(flc,1)} A`);
+  }
+},
+backup: {
+  form(){ return `<div class="block"><div class="grid2">${F.n("w","Backup load (W)",800)}${F.n("h","Backup hours",4)}
+    ${F.sel("bt","Battery type",[["tub","Tubular lead-acid"],["smf","SMF / VRLA"],["li","Lithium (LFP)"]],"tub")}${F.sel("bv","Battery bank voltage",[["12","12 V"],["24","24 V"],["48","48 V"],["96","96 V"]],"24")}</div>
+    <p class="small muted" style="margin-top:8px">Fan 50-75 W (BLDC 30 W), LED light 10 W, TV 100 W, Wi-Fi 15 W, fridge 150-250 W.</p></div>`; },
+  calc(v){
+    if (!v.w || !v.h) return res("Inverter & battery", "—", "", [], "Enter load and hours.");
+    const va = nextUp(v.w / 0.8 * 1.25, [600, 900, 1100, 1500, 2000, 2500, 3500, 5000, 7500, 10000]);
+    const dod = {tub: 0.6, smf: 0.6, li: 0.9}[v.bt], V = Number(v.bv), ah = v.w * v.h / (V * dod * 0.85);
+    const n = Math.max(1, V / 12), per = nextUp(ah, [100, 120, 150, 180, 200, 220]), strings = Math.ceil(ah / 220);
+    return res("Inverter size", va, "VA", [["Battery needed", fmt(ah, 0) + " Ah at " + V + " V"], ["Suggested bank", (v.bt === "li" ? "LFP " + fmt(V * ah / 1000, 1) + " kWh" : n * strings + " × 12 V " + (strings > 1 ? "220" : per) + " Ah")], ["Energy stored", fmt(V * ah / 1000, 1) + " kWh"],
+      ["Recharge time", v.bt === "li" ? "≈ 3-5 h" : "≈ 10-12 h from flat"], ["Life", v.bt === "li" ? "8-10+ years" : "3-5 years"], ["Inverter type", v.w > 2000 ? "Higher-voltage system or solar hybrid" : "Pure sine wave"]],
+      "For homes with frequent cuts, a solar hybrid inverter recharges the battery from the sun. Keep batteries in a ventilated, cool place.")
+      + howBlock(`Inverter VA = W ÷ 0.8 × 1.25 = ${fmt(v.w/0.8*1.25,0)} → ${va} VA\nAh = W × hours ÷ (bank V × usable ${dod} × 0.85 efficiency) = ${fmt(ah,0)} Ah`);
+  }
+},
+fire: {
+  form(){ return `<div class="block"><div class="grid2">${F.n("area","Area per floor (sq ft)",8000)}${F.n("floors","Floors",4)}
+    ${F.n("rooms","Separate rooms / cabins per floor",12)}${F.n("kit","Kitchens, pantries, DG/boiler rooms (total)",3)}
+    ${F.n("exits","Exits / staircases per floor",2)}</div></div>`; },
+  calc(v){
+    if (!v.area || !v.floors) return res("Fire alarm", "—", "", [], "Enter area and floors.");
+    const m2 = v.area * 0.0929, perFloor = Math.max(Math.ceil(m2 / 60), v.rooms || 0), smoke = perFloor * v.floors, heat = v.kit || 0;
+    const mcp = Math.max(v.exits || 1, Math.ceil(Math.sqrt(m2) / 40)) * v.floors, sounders = Math.max(2, Math.ceil(m2 / 300)) * v.floors;
+    const devices = smoke + heat + mcp + sounders, addr = devices > 60 || v.floors > 4;
+    return res("Detectors needed", smoke + heat, "detectors", [["Smoke detectors", smoke], ["Heat detectors", heat], ["Manual call points", mcp], ["Hooters / sounders", sounders],
+      ["Panel", addr ? "Addressable (" + Math.ceil(devices / 200) + " loop" + (devices > 200 ? "s" : "") + ")" : "Conventional, " + Math.min(16, Math.max(2, v.floors * 2)) + " zones"], ["Fire-survival cable", "≈ " + fmt(devices * 15, 0) + " m"]],
+      "First estimate only: about 60 m² per smoke detector (flat ceilings up to ~6 m), one per enclosed room, heat detectors in kitchens and DG rooms. Final layout must follow IS 2189 / NBC 2016 and the fire officer's requirements.")
+      + howBlock(`Smoke per floor = max(area ${fmt(m2,0)} m² ÷ 60, rooms ${v.rooms||0}) = ${perFloor}\nCall points: at every exit, ~40 m travel distance\nPanel: addressable above ~60 devices or 4 floors`);
+  }
+},
+tray: {
+  form(){ return `<div class="block"><div class="grid2">${F.n("n","Number of cables",12)}${F.n("od","Average cable diameter (mm)",32)}
+    ${F.seg("kind","Cables",[["power","Power (one layer)"],["ctrl","Control (stacked)"]],"power")}${F.n("spare","Spare space (%)",25)}</div>
+    <p class="small muted" style="margin-top:8px">Rough ODs: 4C×16 Al armoured ≈ 25 mm, 4C×95 ≈ 40 mm, 4C×240 ≈ 58 mm, control 12C×1.5 ≈ 18 mm.</p></div>`; },
+  calc(v){
+    if (!v.n || !v.od) return res("Tray width", "—", "", [], "Enter cables and diameter.");
+    const sizes = [100, 150, 200, 300, 450, 600, 750, 900];
+    const w = v.kind === "power" ? v.n * v.od * 1.25 : v.n * v.od * v.od * 0.785 / 0.4 / 50;
+    const need = w * (1 + (v.spare || 0) / 100), tw = sizes.find(s => s >= need), trays = tw ? 1 : Math.ceil(need / 900);
+    return res("Tray width", tw || 900, "mm", [["Space needed", fmt(need, 0) + " mm"], ["Trays", tw ? "1 tray" : trays + " trays of 900 mm (or tiers)"], ["Type", v.od > 30 ? "Ladder tray (heavy cables)" : "Perforated tray"], ["Depth", v.kind === "power" ? "50-75 mm" : "50-100 mm"]],
+      "Power cables are laid in one layer with spacing (about a quarter of a diameter) to keep them cool; control cables can be stacked up to about 40% fill.")
+      + howBlock(v.kind === "power" ? `Width = cables × OD × 1.25 spacing = ${v.n} × ${v.od} × 1.25 = ${fmt(w,0)} mm, + ${v.spare}% spare` : `Width = total cable area ÷ 40% fill ÷ 50 mm depth`);
+  }
+},
+water: {
+  form(){ return `<div class="block"><h3>Sewage treatment (STP)</h3><div class="grid2">${F.n("ppl","People (residents or staff)",400)}${F.sel("lpd","Water use per person",[["135","135 L/day (homes)"],["45","45 L/day (offices)"],["180","180 L/day (hotels)"],["340","340 L/day (hospital beds)"]],"135")}</div></div>
+    <div class="block"><h3>RO plant</h3><div class="grid2">${F.n("need","Treated water needed per day (litres)",20000)}${F.n("hrs","Plant running hours/day",16)}${F.n("rec","RO recovery (%)",65)}</div></div>`; },
+  calc(v){
+    const kld = (v.ppl || 0) * Number(v.lpd) * 0.8 / 1000, stp = nextUp(kld * 1.2, [5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 250, 300, 400, 500, 750, 1000]);
+    const lph = (v.need || 0) / Math.max(1, v.hrs || 16), ro = nextUp(lph, [250, 500, 1000, 2000, 3000, 5000, 10000, 15000, 20000, 25000]), feed = ro / ((v.rec || 65) / 100);
+    return res("STP size", stp, "KLD", [["Sewage per day", fmt(kld, 1) + " KLD"], ["Technology", stp <= 50 ? "MBBR (packaged)" : stp <= 300 ? "MBBR or SBR" : "MBBR / SBR / MBR"], ["RO plant", ro + " LPH"], ["RO feed water", fmt(feed, 0) + " LPH"],
+      ["RO reject", fmt(feed - ro, 0) + " LPH"], ["Pre-treatment", "Sand + carbon filter, antiscalant"]],
+      "Sewage ≈ 80% of water used. STP size includes 20% margin. Final RO design needs the raw-water test (TDS, hardness, iron).")
+      + howBlock(`STP: ${v.ppl} people × ${v.lpd} L × 0.8 ÷ 1000 = ${fmt(kld,1)} KLD → +20% → ${stp} KLD\nRO: ${v.need} L ÷ ${v.hrs} h = ${fmt(lph,0)} LPH → ${ro} LPH; feed = ÷ ${v.rec}% recovery`);
+  }
+}
+});
+
+/* ---- Product finder ---- */
+const FIND_SITES = [["home","Home / villa"],["floor","Builder floor / new building"],["farm","Farmhouse"],["office","Office / IT company"],["shop","Shop / showroom"],["clinic","Clinic / hospital"],["school","School / campus"],["hotel","Hotel / restaurant"],["society","Society / township"],["factory","Factory / plant"],["warehouse","Warehouse / cold store"]];
+const FIND_NEEDS = [["cuts","Power cuts / backup"],["voltage","Voltage problems"],["bills","High power bills"],["safety","Shocks / electrical safety"],["lightning","Lightning / surges"],["security","Security (CCTV)"],["fire","Fire safety / NOC"],["ev","EV charging"],["water","Water quality"],["sewage","Sewage / effluent"],["motors","Pumps & motors"],["lighting","Lighting"],["display","Display / branding"],["network","Network / Wi-Fi"],["hvac","AC / ventilation"],["new","Complete new electrical work"]];
+const FIND_MAP = {
+  cuts: {all:["28","27"], big:["09","04","14"], farm:["32"], home:["28","32"]},
+  voltage: {all:["29"], big:["30"]},
+  bills: {all:["32","21"], big:["05","35","31","30"], office:["47"]},
+  safety: {all:["12","24","13"], big:["11","56"]},
+  lightning: {all:["24"]},
+  security: {all:["53","52"]},
+  fire: {all:["25","18"], big:["26"]},
+  ev: {all:["33","24","12"]},
+  water: {all:["42","39"], big:["43","45"]},
+  sewage: {all:["41"], factory:["40"]},
+  motors: {all:["35","34","15"], big:["03","36"]},
+  lighting: {all:["21","23"], farm:["22"], society:["22"], school:["22"], factory:["21"]},
+  display: {all:["50"]},
+  network: {all:["52","54"]},
+  hvac: {all:["49"], big:["47"], warehouse:["51"]},
+  new: {all:["18","20","13","11","24","21"], big:["02","07","17","19","55"]}
+};
+const BIG = ["factory","clinic","school","hotel","society","office","warehouse"];
+const SITE_BASE = {home:["12","29","24"], floor:["18","20","13","12","24","33"], farm:["24","32","22","53","29"], office:["27","29","52","53"], shop:["21","29","53"], clinic:["27","29","24","25"], school:["25","53","22","32"], hotel:["25","41","42","49"], society:["41","33","22","53","32"], factory:["05","35","07","02","24"], warehouse:["21","53","25","51"]};
+function finderResults(site, needs){
+  const score = {}, why = {};
+  const add = (no, w, r) => { score[no] = (score[no] || 0) + w; (why[no] = why[no] || new Set()).add(r); };
+  (SITE_BASE[site] || []).forEach(no => add(no, 1, "Common for this site"));
+  needs.forEach(n => { const m = FIND_MAP[n]; if (!m) return; const lbl = (FIND_NEEDS.find(x => x[0] === n) || [n, n])[1];
+    (m.all || []).forEach(no => add(no, 3, lbl)); if (BIG.includes(site)) (m.big || []).forEach(no => add(no, 2, lbl)); (m[site] || []).forEach(no => add(no, 3, lbl)); });
+  return Object.keys(score).sort((a, b) => score[b] - score[a]).map(no => ({no, why: [...why[no]]}));
+}
+function vFinder(){
+  setHeader("Tools", "Product finder", "#tools");
+  const f = ui.finder || (ui.finder = {site: "farm", needs: ["cuts","lightning","security"]});
+  const rs = finderResults(f.site, f.needs);
+  const mayaOf = no => (CT.ready() ? (ctItem(no) || {}).maya || [] : (Object.entries({"11":"switchgear","12":"switchgear","13":"switchgear","14":"switchgear","20":"switchgear","17":"cables","18":"cables","19":"cables","21":"lighting","22":"lighting","23":"lighting","24":"earthing","27":"ups","28":"ups","29":"stabilizer","32":"solar","33":"ev","35":"vfd","36":"plc","37":"plc","47":"bms","50":"ledwall","52":"cctv","53":"cctv"}).filter(([k]) => k === no).map(([, v]) => v))).filter(id => byId[id] && byId[id].maya);
+  const row = r => { const x = CT.ready() ? ctItem(r.no) : null, m = mayaOf(r.no), p = m[0] && byId[m[0]];
+    const name = x ? x.name : p ? p.name : "Chemotech product " + r.no;
+    return `<a class="li" href="${x ? "#c-" + r.no : p ? "#p-" + p.id : "#chemotech"}"><span class="cno mono">${r.no}</span><span class="grow"><b>${esc(name)}</b><span>${esc(r.why.join(" · "))}</span></span>${m.length ? `<span class="pill good">Maya</span>` : svg("chev")}</a>`; };
+  const maya = rs.filter(r => mayaOf(r.no).length), rest = rs.filter(r => !mayaOf(r.no).length);
+  return `<div class="block stack"><h3 style="margin:0">1. What kind of site?</h3><div class="chips" style="flex-wrap:wrap;overflow:visible;padding:0">${FIND_SITES.map(([k, l]) => `<button class="chip ${f.site === k ? "on" : ""}" data-act="fsite" data-v="${k}">${l}</button>`).join("")}</div>
+    <h3 style="margin:6px 0 0">2. What do they need or complain about?</h3><div class="chips" style="flex-wrap:wrap;overflow:visible;padding:0">${FIND_NEEDS.map(([k, l]) => `<button class="chip ${f.needs.includes(k) ? "sel" : ""}" data-act="fneed" data-v="${k}">${l}</button>`).join("")}</div></div>
+  <div class="sec-h"><h3>Pitch first: in your Maya list</h3><span class="small muted mono">${maya.length}</span></div>${maya.length ? `<div class="list">${maya.map(row).join("")}</div>` : `<div class="empty" style="padding:14px">Pick a site and needs above.</div>`}
+  <div class="sec-h"><h3>Also from Chemotech</h3><span class="small muted mono">${rest.length}</span></div>${rest.length ? `<div class="list">${rest.map(row).join("")}</div>` : `<div class="empty" style="padding:14px">Nothing extra for this mix.</div>`}
+  ${CT.ready() ? "" : `<p class="small muted" style="margin-top:10px">Unlock the Chemotech tab to see names and full details of every catalogue product.</p>`}
+  <div class="btnbar"><a class="btn" href="#survey" data-act="newsurvey">${svg("clip")} Start a site survey</a><a class="btn" href="#lead-new">${svg("users")} Add as a lead</a></div>`;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const a = b.dataset.act;
+  if (a === "fsite"){ ui.finder.site = b.dataset.v; rerender(); }
+  else if (a === "fneed"){ const n = ui.finder.needs, v = b.dataset.v, i = n.indexOf(v); if (i >= 0) n.splice(i, 1); else n.push(v); rerender(); }
+  else if (a === "qcat"){ const [no, i] = b.dataset.v.split("|"), x = ctItem(no), v = x && x.variants[+i]; if (!v) return;
+    ui.quote.lines.push({desc: x.name + (v.v ? ": " + v.v : "") + (b.dataset.m ? " (" + b.dataset.m + ")" : ""), qty: 1, rate: null, gst: 18, hint: ""}); ui.qcq = ""; const s = $("#qcat-q"); if (s) s.value = ""; const r = $("#qcat-r"); if (r) r.innerHTML = ""; refreshQuote(true); toast("Added to quote"); }
+});
+document.addEventListener("input", e => {
+  if (e.target.id !== "qcat-q") return;
+  ui.qcq = e.target.value; clearTimeout(ui.qcT);
+  ui.qcT = setTimeout(() => { const r = $("#qcat-r"); if (!r) return; const q = ui.qcq.trim(); if (q.length < 2){ r.innerHTML = ""; return; }
+    const out = [];
+    for (const res of ctSearch(q).slice(0, 6)){ const vs = res.vars.length ? res.vars : res.x.variants.slice(0, 3);
+      vs.slice(0, 4).forEach(v => { const i = res.x.variants.indexOf(v); out.push(`<div class="li" style="flex-wrap:wrap"><span class="grow"><b>${hl(res.x.name + (v.v ? ": " + v.v : ""), q)}</b><span>${esc(v.brief || "")}</span></span><span class="brands" style="width:100%">${v.m.slice(0, 6).map(m => `<button class="chip" data-act="qcat" data-v="${res.x.no}|${i}" data-m="${esc(m)}">+ ${esc(m)}</button>`).join("")}<button class="chip" data-act="qcat" data-v="${res.x.no}|${i}" data-m="">+ no make</button></span></div>`); }); }
+    r.innerHTML = out.length ? `<div class="list" style="margin-top:8px">${out.join("")}</div>` : `<p class="small muted" style="margin-top:6px">Nothing found.</p>`; }, 150);
+});
+
 /* ---------- SELL ---------- */
 const LSTAGES = ["New","Contacted","Meeting","Quote sent","Won","Lost"];
 const stCls = s => s==="Won"?"good":s==="Lost"?"bad":s==="Quote sent"?"warn":"";
@@ -881,6 +1098,7 @@ function vQuote(id){
     ${F.seg("qplace","Client is in",[["intra","Same state (CGST+SGST)"],["inter","Other state (IGST)"]],q.place).replace(/name="qplace"/g,'name="qplace" data-in="qplace"')}</div>
     <div class="block"><h3>Items</h3><div id="qlines">${qLines(q)}</div>
     <div class="field" style="margin-top:10px"><label for="q-add">Add from your price list</label><select class="inp" id="q-add" data-in="qadd"><option value="">Choose an item…</option>${opts}</select></div>
+    ${CT.ready() ? `<div class="field" style="margin-top:10px"><label for="qcat-q">Add from Chemotech catalogue (any of 328 variants)</label><input class="inp" id="qcat-q" type="search" placeholder="e.g. RCCB 63 A, chemical earthing, 8-channel NVR" autocomplete="off" value="${esc(ui.qcq || "")}"></div><div id="qcat-r"></div>` : `<p class="small muted" style="margin-top:8px">Unlock the Chemotech tab to add any catalogue variant here.</p>`}
     <div class="btnbar"><button class="btn sm" data-act="qcustom">${svg("plus")} Custom line</button></div>
     <div id="qtot">${qTotals(q)}</div></div>
     <div class="block"><h3>Terms</h3><textarea class="inp" data-in="q" data-f="terms" rows="4">${esc(q.terms)}</textarea></div>
@@ -1584,8 +1802,8 @@ function ctSearch(q){
   const out = [];
   for (const x of CT.data.items){
     const head = ctNorm([x.no, x.name, x.desc, x.use, x.buyers, x.group, x.main.join(" ")].join(" "));
-    const vars = x.variants.filter(v => { const t = ctNorm(v.v + " " + v.m.join(" ")); return terms.every(w => (head + " " + t).includes(w)) && terms.some(w => t.includes(w)); });
-    const all = terms.every(w => (head + " " + ctNorm(x.variants.map(v => v.v + " " + v.m.join(" ")).join(" "))).includes(w));
+    const vars = x.variants.filter(v => { const t = ctNorm(v.v + " " + v.m.join(" ") + " " + (v.brief || "") + " " + (v.use || "")); return terms.every(w => (head + " " + t).includes(w)) && terms.some(w => t.includes(w)); });
+    const all = terms.every(w => (head + " " + ctNorm(x.variants.map(v => v.v + " " + v.m.join(" ") + " " + (v.brief || "") + " " + (v.use || "")).join(" ")) + " " + ctNorm(x.learn ? x.learn.what : "")).includes(w));
     if (!all) continue;
     let score = terms.reduce((s, w) => s + (ctNorm(x.name).includes(w) ? 5 : 0) + (x.no === w.padStart(2, "0") ? 8 : 0) + (head.includes(w) ? 2 : 0), 0) + vars.length;
     out.push({x, vars, score});
@@ -1643,6 +1861,50 @@ function ctList(){
   }
   return html;
 }
+/* ---- diagrams: simple labelled flow drawn as SVG ---- */
+function wrapTxt(s, n){ const w = String(s).split(" "), out = []; let l = ""; for (const x of w){ if ((l + " " + x).trim().length > n && l){ out.push(l); l = x; } else l = (l + " " + x).trim(); } if (l) out.push(l); return out.slice(0, 3); }
+function diagramSVG(d){
+  if (!d || !d.flow) return "";
+  const W = 340, bw = 250, bx = (W - bw) / 2, gap = 22, his = [].concat(d.hi == null ? [] : d.hi);
+  let y = 8, parts = [];
+  const box = (x, yy, w, label, on) => { const lines = wrapTxt(label, Math.floor(w / 7.4)), h = 16 + lines.length * 15;
+    parts.push(`<rect x="${x}" y="${yy}" width="${w}" height="${h}" rx="8" fill="${on ? "var(--copper)" : "var(--surface)"}" stroke="${on ? "var(--copper)" : "var(--line)"}" stroke-width="1.5"/>`);
+    lines.forEach((t, i) => parts.push(`<text x="${x + w / 2}" y="${yy + 21 + i * 15}" text-anchor="middle" font-size="12.5" font-weight="${on ? 700 : 600}" fill="${on ? "var(--copper-ink)" : "var(--ink)"}">${esc(t)}</text>`));
+    return h; };
+  const arrow = (x, y1, y2) => parts.push(`<path d="M${x} ${y1} V${y2 - 6}" stroke="var(--muted)" stroke-width="1.6"/><path d="M${x - 5} ${y2 - 7} L${x} ${y2} L${x + 5} ${y2 - 7}" fill="none" stroke="var(--muted)" stroke-width="1.6"/>`);
+  d.flow.forEach((f, i) => { const h = box(bx, y, bw, f, his.includes(i)); y += h; if (i < d.flow.length - 1 || (d.fan && d.fan.length)){ arrow(W / 2, y, y + gap); y += gap; } });
+  if (d.fan && d.fan.length){
+    const n = d.fan.length, cols = n <= 2 ? n : 2, fw = (W - 16 - (cols - 1) * 10) / cols, hiFan = his.includes(-1);
+    let rowY = y, maxH = 0;
+    d.fan.forEach((f, i) => { const c = i % cols; if (i && c === 0){ rowY += maxH + 10; maxH = 0; } const h = box(8 + c * (fw + 10), rowY, fw, f, hiFan); maxH = Math.max(maxH, h); });
+    y = rowY + maxH;
+  }
+  return `<figure class="dia"><svg viewBox="0 0 ${W} ${y + 8}" role="img" aria-label="${esc(d.note || "Diagram")}" font-family="var(--f-body)">${parts.join("")}</svg>${d.note ? `<figcaption>${esc(d.note)}</figcaption>` : ""}</figure>`;
+}
+const photoLink = q => `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`;
+function variantCard(x, v, i, q){
+  const name = v.v || x.name, query = (v.v ? x.name.split("&")[0].trim() + " " + v.v.split("–").pop().trim() : x.name) + " " + (v.m[0] || "");
+  return `<details class="vcard" ${q ? "open" : ""}><summary><span class="cno mono" style="width:30px;height:30px;font-size:11px">${i + 1}</span><span class="grow" style="min-width:0"><b>${hl(name, q)}</b><span class="small muted" style="display:block">${esc(v.brief || "")}</span></span></summary>
+    <div class="vbody">
+      ${v.use ? `<div class="vk"><b>Use case</b><span>${esc(v.use)}</span></div>` : ""}
+      ${v.tech ? `<div class="vk"><b>Key specs</b><span>${esc(v.tech)}</span></div>` : ""}
+      ${v.tip ? `<div class="vk"><b>Selling tip</b><span>${esc(v.tip)}</span></div>` : ""}
+      <div class="vk"><b>Makes</b><span class="brands">${v.m.map(m => `<span>${hl(m, q)}</span>`).join("")}</span></div>
+      <div class="btnbar" style="margin-top:4px"><a class="btn sm" href="${photoLink(query)}" target="_blank" rel="noopener">${svg("camera")} See photos</a>
+      <button class="btn sm ghost" data-act="ctquote" data-no="${x.no}" data-i="${i}">${svg("quote")} Add to quote</button></div>
+    </div></details>`;
+}
+function ctLearnHtml(x){
+  const l = x.learn || {};
+  return `${diagramSVG(x.dia)}
+  <div class="block"><h3>What it's for</h3><p class="lead-p">${esc(x.use)}</p><div class="where" style="margin-top:10px"><div><b>Buyers</b><span>${esc(x.buyers)}</span></div></div></div>
+  ${l.what ? `<div class="block"><h3>What it is</h3><p>${esc(l.what)}</p></div>` : ""}
+  ${l.how ? `<div class="block"><h3>How it works</h3><ol class="steps">${l.how.map(s => `<li><span>${esc(s)}</span></li>`).join("")}</ol></div>` : ""}
+  ${l.pick ? `<div class="block"><h3>How to choose & size it</h3><ul class="bul">${l.pick.map(s => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
+  ${l.tech ? `<div class="block"><h3>Technical terms</h3><dl class="gloss">${l.tech.map(t => `<dt>${esc(t[0])}</dt><dd>${esc(t[1])}</dd>`).join("")}</dl></div>` : ""}
+  ${l.mistakes ? `<div class="block"><h3>Mistakes to avoid</h3><ul class="bul">${l.mistakes.map(s => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
+  ${l.ask ? `<div class="block"><h3>Questions to ask the customer</h3><ol class="steps">${l.ask.map(s => `<li><span>${esc(s)}</span></li>`).join("")}</ol></div>` : ""}`;
+}
 function vCItem(no){
   if (!CT.ready()){ setHeader("Catalogue", "Chemotech", "#chemotech"); return ctLockForm(); }
   const x = ctItem(no); if (!x) return `<div class="empty"><b>Product not found</b></div>`;
@@ -1650,20 +1912,29 @@ function vCItem(no){
   ui.fromC = no;
   const q = ui.cq || "", links = x.maya.map(id => byId[id]).filter(Boolean);
   const makes = [...new Set(x.variants.flatMap(v => v.m))];
+  const tab = (ui.ctab && ui.ctab[no]) || (q ? "var" : "learn");
+  const prev = String(+no - 1).padStart(2, "0"), next = String(+no + 1).padStart(2, "0");
   return `<div class="plate"><i class="s1"></i><i class="s2"></i>
     <div class="hd"><span class="cno mono" style="width:52px;height:52px;font-size:17px">${x.no}</span><div style="min-width:0"><h2>${esc(x.name)}</h2><p class="tag">${esc(x.desc)}</p></div></div>
     <dl class="kv"><div><dt>Group</dt><dd>${esc(x.group)}</dd></div><div><dt>Variants</dt><dd class="mono">${x.variants.length}</dd></div><div><dt>Makes</dt><dd class="mono">${makes.length}</dd></div></dl></div>
-  <div class="block" style="margin-top:12px"><h3>What it's for</h3><p class="lead-p">${esc(x.use)}</p><div class="where" style="margin-top:10px"><div><b>Buyers</b><span>${esc(x.buyers)}</span></div></div></div>
-  ${links.length ? `<div class="block"><h3>Learn & sell</h3><div class="list" style="border:0">${links.map(p => `<a class="li" href="#p-${p.id}" style="padding-inline:0"><span class="ico" style="width:38px;height:38px">${svg(p.icon)}</span><span class="grow"><b>${esc(p.name)}</b><span>${p.maya ? "In Maya Traders' list: lessons, sizing, pitch, prices" : "Chemotech guide: how it works and who buys"}</span></span>${svg("chev")}</a>`).join("")}</div></div>` : ""}
-  <div class="block"><h3>Main makes</h3><div class="brands">${x.main.map(m => `<span>${esc(m)}</span>`).join("")}</div></div>
-  <div class="block"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Variants & makes</h3><span class="small muted mono">${x.variants.length}</span></div>
-    <div class="vlist">${x.variants.map(v => `<div class="vrow"><b>${hl(v.v || x.name, q)}</b><div class="brands" style="margin-top:6px">${v.m.map(m => `<span>${hl(m, q)}</span>`).join("")}</div></div>`).join("")}</div>
-    ${x.note ? `<p class="src" style="background:var(--surface-2)">${esc(x.note)}</p>` : ""}</div>
+  ${links.length ? `<div class="list" style="margin-top:12px">${links.map(p => `<a class="li" href="#p-${p.id}"><span class="ico" style="width:38px;height:38px">${svg(p.icon)}</span><span class="grow"><b>${esc(p.name)}</b><span>${p.maya ? "In your Maya list: lessons, pitch, objections, prices" : "Chemotech guide: selling notes"}</span></span>${p.maya ? `<span class="pill good">Maya</span>` : svg("chev")}</a>`).join("")}</div>` : ""}
+  <div class="seg" role="tablist">${[["learn", "Learn"], ["var", `Variants (${x.variants.length})`], ["makes", "Makes"]].map(([k, l]) => `<button class="${tab === k ? "on" : ""}" data-act="ctab" data-no="${no}" data-v="${k}" role="tab">${l}</button>`).join("")}</div>
+  <div id="cpanel">${ctPanel(x, tab, q)}</div>
   <div class="btnbar"><button class="btn" data-act="copy" data-text="${esc(x.no + ". " + x.name + " — " + x.desc + "\n" + x.variants.map(v => "• " + (v.v || x.name) + ": " + v.m.join(", ")).join("\n"))}">${svg("copy")} Copy details</button>
     <a class="btn" href="#lead-new" data-act="newleadc" data-v="${x.no}">${svg("users")} Add a lead</a></div>
-  <div class="btnbar">${CT.data.items.some(y => y.no === String(+no - 1).padStart(2, "0")) ? `<a class="btn sm ghost" href="#c-${String(+no - 1).padStart(2, "0")}">‹ ${esc(ctItem(String(+no - 1).padStart(2, "0")).name)}</a>` : ""}
-    ${CT.data.items.some(y => y.no === String(+no + 1).padStart(2, "0")) ? `<a class="btn sm ghost" href="#c-${String(+no + 1).padStart(2, "0")}">${esc(ctItem(String(+no + 1).padStart(2, "0")).name)} ›</a>` : ""}</div>`;
+  <div class="btnbar">${ctItem(prev) ? `<a class="btn sm ghost" href="#c-${prev}">‹ ${esc(ctItem(prev).name)}</a>` : ""}${ctItem(next) ? `<a class="btn sm ghost" href="#c-${next}">${esc(ctItem(next).name)} ›</a>` : ""}</div>`;
 }
+function ctPanel(x, tab, q){
+  if (tab === "var") return `<p class="small muted" style="margin:8px 0">Tap a variant for its use case, key specs, selling tip, makes and photos.</p><div class="vlist2">${x.variants.map((v, i) => variantCard(x, v, i, q && ctNorm(v.v + " " + v.m.join(" ") + " " + (v.brief || "")).includes(ctNorm(q).trim()) ? q : "")).join("")}</div>`;
+  if (tab === "makes"){
+    const all = {}; x.variants.forEach(v => v.m.forEach(m => (all[m] = all[m] || []).push(v.v || x.name)));
+    return `<div class="block"><h3>Main makes</h3><div class="brands">${x.main.map(m => `<span>${esc(m)}</span>`).join("")}</div></div>
+      <div class="block"><h3>All makes and what they supply</h3>${Object.entries(all).sort((a, b) => b[1].length - a[1].length).map(([m, vs]) => `<div class="vrow"><div class="row" style="justify-content:space-between"><b>${esc(m)}</b><a class="small" href="${photoLink(m + " " + x.name)}" target="_blank" rel="noopener">Photos</a></div><span class="small muted">${vs.map(esc).join(" · ")}</span></div>`).join("")}
+      ${x.note ? `<p class="src" style="background:var(--surface-2)">${esc(x.note)}</p>` : ""}</div>`;
+  }
+  return ctLearnHtml(x) + `<div class="btnbar"><a class="btn" href="${photoLink(x.name + " " + (x.main[0] || ""))}" target="_blank" rel="noopener">${svg("camera")} See product photos</a></div>`;
+}
+
 function vCAbout(){
   if (!CT.ready()){ setHeader("Catalogue", "Chemotech", "#chemotech"); return ctLockForm(); }
   const c = CT.data.company;
@@ -1708,6 +1979,9 @@ document.addEventListener("click", e => {
   else if (a === "ctlock"){ CT.lock(); toast("Catalogue locked on this phone"); rerender(); }
   else if (a === "cgroup"){ ui.cgroup = b.dataset.v; $$(".chips .chip").forEach(c => c.classList.toggle("on", c === b)); const l = $("#clist"); if (l) l.innerHTML = ctList(); }
   else if (a === "ctq"){ ui.cq = b.dataset.v; ui.cgroup = "all"; }
+  else if (a === "ctab"){ const no = b.dataset.no; ui.ctab = ui.ctab || {}; ui.ctab[no] = b.dataset.v; $$(".seg button").forEach(x => x.classList.toggle("on", x === b)); $("#cpanel").innerHTML = ctPanel(ctItem(no), b.dataset.v, ui.cq || ""); }
+  else if (a === "ctquote"){ const x = ctItem(b.dataset.no), v = x && x.variants[+b.dataset.i]; if (!v) return; if (!ui.quote || ui.quote.id) ui.quote = newQuote();
+    ui.quote.lines.push({desc: x.name + (v.v ? ": " + v.v : "") + (v.m[0] ? " (" + v.m[0] + ")" : ""), qty: 1, rate: null, gst: 18, hint: ""}); toast("Added to quote"); location.hash = "#quote"; }
   else if (a === "newleadc"){ const x = ctItem(b.dataset.v); ui.newLead = {id: "", stage: "New", type: "builder", products: (x && x.maya.filter(id => byId[id] && byId[id].maya)) || [], notes: x ? "Interested in: " + x.name : ""}; }
 });
 document.addEventListener("input", e => {
